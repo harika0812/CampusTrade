@@ -1,0 +1,20 @@
+.sell-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sell-form input,
+.sell-form textarea,
+.sell-form select {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e4e7ec;
+  font-size: 15px;
+  background: #fff;
+}
+
+.sell-form textarea {
+  resize: vertical;
+  min-height: 110px;
+}

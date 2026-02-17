@@ -1,0 +1,96 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 248, 240, 0.92);
+  border-bottom: 1px solid #ffe3c3;
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111827;
+  text-decoration: none;
+  letter-spacing: -0.3px;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-btn {
+  margin-right: 8px;
+  text-decoration: none;
+  color: #111827;
+  padding: 8px 12px;
+  border-radius: 10px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: #f3f4f6;
+}
+
+.nav-btn.primary {
+  padding: 8px 14px;
+  border: none;
+  color: #1f2937;
+  background: linear-gradient(90deg, #ff8a00, #ffb347);
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(255, 138, 0, 0.22);
+}
+
+/* Profile styles */
+.profile-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #111827;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.dropdown {
+  position: absolute;
+  top: 62px;
+  right: 24px;
+  background: #ffffff;
+  border: 1px solid #eef0f6;
+  border-radius: 12px;
+  padding: 10px;
+  width: 180px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
+}
+
+.dropdown button {
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.dropdown button:hover {
+  background: #f3f4f6;
+}
+
+.dropdown .logout {
+  color: #ef4444;
+}
+.dropdown .settings {
+  color: #111827;
+}
