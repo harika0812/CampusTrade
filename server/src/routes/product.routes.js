@@ -1,11 +1,14 @@
 import express from "express";
 import { protect } from "../middlewares/auth.middleware.js";
 import upload from "../middlewares/upload.middleware.js";
+import { validateProduct } from "../middlewares/validate.js";
+import { productLimiter } from "../middlewares/rateLimit.middleware.js";
 import {
   createProduct,
   getAllProducts,
   getProductById,
   getMyProducts,
+  updateProduct,
   markProductAsSold,
   deleteProduct
 } from "../controllers/product.controller.js";
@@ -16,8 +19,9 @@ const router = express.Router();
 router.get("/", getAllProducts);
 
 // PROTECTED
-router.post("/", protect, upload.single("image"), createProduct);
+router.post("/", protect, productLimiter, upload.single("image"), validateProduct, createProduct);
 router.get("/mine", protect, getMyProducts); // Move this before /:id
+router.put("/:id", protect, upload.single("image"), updateProduct);
 router.put("/:id/sold", protect, markProductAsSold);
 router.delete("/:id", protect, deleteProduct);
 

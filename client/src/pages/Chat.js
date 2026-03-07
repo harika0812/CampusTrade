@@ -41,17 +41,13 @@ const Chat = () => {
   const [searchParams] = useSearchParams();
   const [active, setActive] = useState({
     otherUserId: null,
-    productId: null,
-    name: "Seller",
-    productTitle: ""
+    name: "User"
   });
 
   useEffect(() => {
     setActive({
       otherUserId: searchParams.get("user") || null,
-      productId: searchParams.get("product") || null,
-      name: searchParams.get("name") || "Seller",
-      productTitle: searchParams.get("title") || ""
+      name: searchParams.get("name") || "User"
     });
   }, [searchParams]);
 
@@ -71,7 +67,7 @@ const Chat = () => {
           <button className="auth-gate-arrow" onClick={() => navigate("/marketplace")}
             aria-label="Back to marketplace"
           >
-            <span style={{fontSize: "1.5rem", lineHeight: 1}}>&larr;</span>
+            <span className="auth-gate-arrow-icon">&larr;</span>
           </button>
           <div className="auth-gate-actions">
             <button className="btn btn-primary" onClick={() => navigate("/login")}>Log in</button>
@@ -82,17 +78,12 @@ const Chat = () => {
   }
 
   return (
-    <div
-      className="container chat-page"
-      style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20 }}
-    >
+    <div className="container page page-shell chat-page chat-layout">
       <ChatList userId={userId} onSelect={setActive} />
       <ChatWindow
         userId={userId}
         otherUserId={active.otherUserId}
-        productId={active.productId}
         name={active.name}
-        productTitle={active.productTitle}
       />
     </div>
   );

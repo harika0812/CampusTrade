@@ -78,10 +78,12 @@
 import { useEffect, useState } from "react";
 import { fetchMyListings, deleteProduct, markAsSold } from "../../api/product.api";
 
+const SOLD_NOTIFICATION_KEY = "campustrade_sold_notifications";
+const SALES_HUB_UPDATED_EVENT = "sales-hub-updated";
+
 const MyListings = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showFirstSaleCelebration, setShowFirstSaleCelebration] = useState(false);
 
   useEffect(() => {
     loadMyProducts();
@@ -102,86 +104,89 @@ const MyListings = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this product?")) return;
-    const previous = products;
-    setProducts((prev) => prev.filter((p) => p._id !== id));
     try {
       await deleteProduct(id);
+      await loadMyProducts();
     } catch (err) {
-      setProducts(previous);
       alert("Delete failed. Please try again.");
     }
   };
 
   const handleSold = async (id) => {
-    const previous = products;
-    const soldCount = previous.filter((p) => p.isSold).length;
-    setProducts((prev) =>
-      prev.map((p) => (p._id === id ? { ...p, isSold: true } : p))
-    );
     try {
+      const soldProduct = products.find((item) => item._id === id);
       await markAsSold(id);
-      const alreadyCelebrated = localStorage.getItem("firstSaleCelebrated") === "true";
-      if (soldCount === 0 && !alreadyCelebrated) {
-        localStorage.setItem("firstSaleCelebrated", "true");
-        setShowFirstSaleCelebration(true);
-        setTimeout(() => setShowFirstSaleCelebration(false), 3000);
-      }
+
+      const nextNotification = {
+        id: `${Date.now()}-${id}`,
+        productId: id,
+        title: soldProduct?.title || "your product",
+        createdAt: new Date().toISOString(),
+      };
+
+      const existingNotifications = JSON.parse(localStorage.getItem(SOLD_NOTIFICATION_KEY) || "[]");
+      const merged = [nextNotification, ...existingNotifications].slice(0, 20);
+      localStorage.setItem(SOLD_NOTIFICATION_KEY, JSON.stringify(merged));
+      window.dispatchEvent(new Event(SALES_HUB_UPDATED_EVENT));
+
+      alert(`Hooray! Congratulations on selling \"${nextNotification.title}\" successfully.`);
+      await loadMyProducts();
     } catch (err) {
-      setProducts(previous);
       alert("Update failed. Please try again.");
     }
   };
 
   if (loading) {
     return (
-      <div className="page listings-page">
+      <div className="container page listings-page">
         <h2>My Listings</h2>
-        <div className="listing-grid">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={`listing-skeleton-${index}`} className="listing-card">
-              <div className="skeleton skeleton-line" />
-              <div className="skeleton skeleton-line short" />
-              <div className="skeleton skeleton-line" />
-              <div className="skeleton skeleton-button" />
-            </div>
-          ))}
-        </div>
+        <p className="empty-text">Loading your listings...</p>
       </div>
     );
   }
 
   return (
-    <div className="page listings-page">
-      <div className={`celebration-overlay ${showFirstSaleCelebration ? "active" : ""}`} aria-hidden={!showFirstSaleCelebration}>
-        <div className="celebration-card">
-          <div className="confetti confetti-1" />
-          <div className="confetti confetti-2" />
-          <div className="confetti confetti-3" />
-          <div className="confetti confetti-4" />
-          <div className="confetti confetti-5" />
-          <h3 className="celebration-title">First sale! 🎊</h3>
-          <p className="celebration-subtitle">You just made your first campus sale.</p>
-        </div>
-      </div>
-
+    <div className="container page listings-page">
       <h2>My Listings</h2>
 
       {products.length === 0 ? (
-        <p className="empty-text">No products listed yet. Your campus is waiting!</p>
+        <p className="empty-text">No products listed yet.</p>
       ) : (
         <div className="listing-grid">
           {products.map((p) => (
             <div key={p._id} className="listing-card">
+              {(() => {
+                const availableCopies = Number(p.availableCopies ?? 1);
+                const reservedCopies = Number(p.reservedCopies ?? 0);
+                const purchasableCopies = Number(p.purchasableCopies ?? Math.max(0, availableCopies - reservedCopies));
+                const stockStatus = p.stockStatus || (p.isSold || availableCopies <= 0
+                  ? "sold_out"
+                  : purchasableCopies <= 0
+                  ? "reserved"
+                  : "available");
+                const listingType = p.listingType || "sell";
+                const listingTypeLabel = listingType === "both" ? "Sell + Lend" : listingType === "lend" ? "Lend" : "Sell";
+                const isSoldOut = stockStatus === "sold_out";
+                const isReserved = stockStatus === "reserved";
+                return (
+                  <>
               <div>
                 <h3>{p.title}</h3>
                 <p className="listing-price">₹ {p.price}</p>
+                <p className="listing-stock">
+                  {listingTypeLabel} • Available {Math.max(0, purchasableCopies)}
+                  {reservedCopies > 0 ? ` • Reserved ${reservedCopies}` : ""}
+                </p>
+                {listingType === "both" ? (
+                  <p className="listing-stock">Borrow fee: ₹ {Number(p?.lendingDetails?.borrowFee || 0)}</p>
+                ) : null}
               </div>
-              <span className={`status-pill ${p.isSold ? "sold" : "live"}`}>
-                {p.isSold ? "Sold" : "Live"}
+              <span className={`status-pill ${isSoldOut ? "sold" : isReserved ? "reserved" : "live"}`}>
+                {isSoldOut ? "Sold Out" : isReserved ? "Reserved" : "Live"}
               </span>
 
               <div className="listing-actions">
-                {!p.isSold && (
+                {!isSoldOut && !isReserved && (
                   <button className="btn btn-primary" onClick={() => handleSold(p._id)}>
                     Mark as Sold
                   </button>
@@ -190,6 +195,9 @@ const MyListings = () => {
                   Delete
                 </button>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>

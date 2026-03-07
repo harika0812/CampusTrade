@@ -1,20 +1,205 @@
+.sell-container {
+  width: min(1140px, calc(100vw - 36px));
+  margin: 28px auto 36px;
+  padding: 28px clamp(18px, 3vw, 32px);
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.42) !important;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.98) 0%, rgba(17, 24, 39, 0.96) 100%) !important;
+  box-shadow: 0 22px 44px rgba(2, 6, 23, 0.42) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.sell-container::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 72px;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.1), rgba(148, 163, 184, 0.04));
+  pointer-events: none;
+}
+
+.sell-container > * {
+  position: relative;
+  z-index: 1;
+}
+
 .sell-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+.sell-heading {
+  margin: 0;
+  color: #f8fafc;
+  font-size: clamp(1.4rem, 2.3vw, 1.82rem);
+  letter-spacing: -0.02em;
+}
+
+.sell-subcopy {
+  margin: 8px 0 18px;
+  color: #dbe7fb;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.field-label {
+  font-size: 0.84rem;
+  color: #e2e8f0;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+
+.field-help {
+  margin: -2px 0 6px;
+  font-size: 0.8rem;
+  color: #b9cae6;
+  line-height: 1.45;
+}
+
+.field-help strong {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.sell-blocker {
+  margin: 4px 0 12px;
+  border: 1px solid rgba(248, 113, 113, 0.52);
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.24);
+  padding: 12px;
+}
+
+.sell-blocker p {
+  margin: 0;
+  color: #fee2e2;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.sell-blocker-btn {
+  margin-top: 10px;
+  min-height: 36px;
+  padding: 7px 12px;
+}
+
+.lending-helper {
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  background: rgba(15, 23, 42, 0.72);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.lending-helper p {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  color: #dbe6f7;
+}
+
+.lending-helper p:last-child {
+  margin-bottom: 0;
+}
+
 .sell-form input,
 .sell-form textarea,
 .sell-form select {
-  padding: 12px 14px;
+  min-height: 46px;
+  padding: 11px 13px;
   border-radius: 12px;
-  border: 1px solid #e4e7ec;
-  font-size: 15px;
-  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  font-size: 14px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #f8fafc;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.sell-form input[type="number"] {
+  text-align: left;
+}
+
+.sell-form input:focus,
+.sell-form textarea:focus,
+.sell-form select:focus {
+  border-color: #93c5fd;
+  background: rgba(2, 6, 23, 0.92);
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22);
 }
 
 .sell-form textarea {
   resize: vertical;
-  min-height: 110px;
+  min-height: 128px;
+}
+
+.sell-form select option {
+  background: #111827;
+  color: #f8fafc;
+}
+
+.sell-file-input {
+  padding: 9px 10px !important;
+  background: rgba(15, 23, 42, 0.9) !important;
+  color: #e2e8f0 !important;
+}
+
+.sell-file-input::file-selector-button {
+  margin-right: 10px;
+  border: 1px solid #64748b;
+  border-radius: 9px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 7px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sell-submit-btn {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 46px;
+  font-size: 0.96rem;
+  letter-spacing: 0.01em;
+}
+
+.edit-existing-image {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.edit-actions .btn {
+  min-height: 38px;
+  padding: 9px 13px;
+  border-radius: 12px;
+}
+
+@media (max-width: 560px) {
+  .sell-container {
+    width: calc(100vw - 20px);
+    margin: 14px auto 24px;
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+
+  .sell-subcopy {
+    margin-bottom: 12px;
+  }
+
+  .edit-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
 }

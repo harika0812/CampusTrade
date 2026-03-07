@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchAllProducts } from "../api/product.api";
 import "./MarketPlace.css";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/authContext";
+import { resolveServerAssetUrl } from "../utils/runtimeConfig";
 
 export default function Marketplace() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const greeting = useMemo(() => {
@@ -24,32 +28,81 @@ export default function Marketplace() {
   }, [user]);
 
   useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const data = await fetchAllProducts();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error fetching products:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadProducts();
   }, []);
 
-  const loadProducts = async () => {
-    try {
-      const data = await fetchAllProducts();
-      setProducts(data);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const queryFromUrl = params.get("q") || "";
+    setSearchQuery(queryFromUrl);
+  }, [location.search]);
+
+  const categories = useMemo(() => {
+    const dynamicCategories = Array.from(
+      new Set(
+        products
+          .map((product) => (product.category || "General").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    return ["All", ...dynamicCategories];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
-    if (!user) return products;
-    const userId = user?.id || user?._id || user?.userId;
-    return products.filter((product) => {
-      const sellerId = product?.sellerId?._id || product?.sellerId;
-      return !sellerId || String(sellerId) !== String(userId);
+    const source = !user
+      ? products
+      : products.filter((product) => {
+          const userId = String(user?.id || user?._id || user?.userId || "");
+          const sellerId =
+            product?.sellerId?._id ||
+            product?.sellerId?.id ||
+            product?.sellerId?.userId ||
+            product?.seller?._id ||
+            product?.seller?.id ||
+            product?.userId ||
+            product?.ownerId ||
+            product?.postedBy ||
+            product?.sellerId;
+          return !sellerId || String(sellerId) !== String(userId);
+        });
+
+    const query = searchQuery.trim().toLowerCase();
+
+    return source.filter((product) => {
+      const matchesCategory =
+        activeCategory === "All" ||
+        (product.category || "General") === activeCategory;
+      const searchableText = [
+        product.title,
+        product.description,
+        product.category,
+        product.sellerName,
+        product.sellerRollNo,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesQuery = !query || searchableText.includes(query);
+
+      return matchesCategory && matchesQuery;
     });
-  }, [products, user]);
+  }, [products, user, activeCategory, searchQuery]);
 
   if (loading) {
     return (
-      <div className="marketplace page">
+      <div className="marketplace page page-shell">
         <div className="marketplace-header">
           <div>
             <h1 className="marketplace-title">
@@ -81,37 +134,62 @@ export default function Marketplace() {
   }
 
   return (
-    <div className="marketplace page">
+    <div className="marketplace page page-shell">
       <div className="marketplace-header">
         <div>
           <h1 className="marketplace-title">
-            {greeting}, {firstName} 👋
+            {greeting}, {firstName} 
           </h1>
           <p className="marketplace-subtitle">
-            Trending in your college • Seniors are selling
+            Discover quality campus listings in one place
           </p>
         </div>
-        <div className="marketplace-pill">Campus picks</div>
+        <div className="marketplace-pill">{filteredProducts.length} live listings</div>
+      </div>
+
+      <div className="marketplace-controls">
+        <input
+          type="text"
+          placeholder="Search by title, category, seller..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="marketplace-search"
+        />
+        <div className="marketplace-categories" role="tablist" aria-label="Filter listings by category">
+          {categories.map((category) => (
+            <button
+              key={category}
+              type="button"
+              className={`marketplace-category ${activeCategory === category ? "active" : ""}`}
+              onClick={() => setActiveCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
       </div>
 
       {filteredProducts.length === 0 ? (
         <div className="empty-state">
-          <img
-            className="empty-illustration"
-            src="https://raw.githubusercontent.com/undraw/undraw/master/svg/online_shopping_re_k1sv.svg"
-            alt="Empty marketplace illustration"
-            loading="lazy"
-          />
+          <div className="empty-illustration" aria-hidden="true">
+            <div className="empty-illustration-icon">🛍️</div>
+            <div className="empty-illustration-line" />
+            <div className="empty-illustration-line short" />
+            <div className="empty-illustration-chip-row">
+              <span />
+              <span />
+            </div>
+          </div>
           <div className="empty-content">
-            <h3>Nothing listed yet</h3>
+            <h3>No listings match your search</h3>
             <p>
-              Be the first in your college to post. Your classmates are
-              waiting for great deals.
+              Try another keyword or category, or create the first listing for
+              your campus.
             </p>
             <div className="empty-tags">
-              <span>Trending in your college</span>
-              <span>Seniors are selling</span>
-              <span>Fresh listings daily</span>
+              <span>Books</span>
+              <span>Electronics</span>
+              <span>Notes</span>
             </div>
             <button className="btn btn-primary view-btn" onClick={() => navigate("/sell")}>
               Create the first listing
@@ -122,15 +200,19 @@ export default function Marketplace() {
         <div className="product-grid">
           {filteredProducts.map((product) => (
             <div className="product-card" key={product._id}>
+              {(() => {
+                return (
+                  <>
               <div className="product-media">
                 <img
-                  src={`http://localhost:5000/${product.images[0]}`}
+                  src={
+                    product.images?.[0]
+                      ? resolveServerAssetUrl(product.images[0])
+                      : "https://via.placeholder.com/600x800?text=CampusTrade"
+                  }
                   alt={product.title}
                   className="product-image"
                 />
-                <span className="condition-badge">
-                  {product.condition || "Good"}
-                </span>
               </div>
 
               <div className="product-info">
@@ -139,23 +221,27 @@ export default function Marketplace() {
                 <p className="product-price">₹ {product.price}</p>
 
                 <p className="product-desc">
-                  {product.description?.slice(0, 80)}...
+                  {product.description || "No description provided."}
                 </p>
 
-                <div className="product-meta">
-                  <span className="meta-chip">{product.category || "General"}</span>
-                  <span className="seller-trust">
-                    ✅ Verified student • {product.sellerName || "Student"}
-                  </span>
-                </div>
+                <div className="product-footer">
+                  <p className="seller-trust">
+                    {product.sellerRollNo || "N/A"}
+                  </p>
 
-                <button
-                  className="btn btn-primary view-btn"
-                  onClick={() => navigate(`/products/${product._id}`)}
-                >
-                  View Details
-                </button>
+                  <div className="product-actions">
+                  <button
+                    className="btn btn-primary view-btn"
+                    onClick={() => navigate(`/products/${product._id}`)}
+                  >
+                    View Details
+                  </button>
+                  </div>
+                </div>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>

@@ -18,9 +18,16 @@ const ProductCard = ({ product }) => {
       <h3 className="product-title">{product.title}</h3>
       <p className="product-category">{product.category}</p>
       <p className="product-price">₹ {product.price}</p>
-      <p className="product-seller">
-        Seller: <span>{product.sellerName}</span>
-      </p>
+      
+      <div className="product-seller-info">
+        <p className="seller-name">{product.sellerName}</p>
+        <p className="seller-trust">
+          {product.sellerRollNo || "N/A"}
+        </p>
+        <p className="seller-details">
+          {product.seller?.className || "N/A"} • {product.seller?.branch || "N/A"} • Year {product.seller?.year || "N/A"}
+        </p>
+      </div>
 
       {/* Clicking this opens details page */}
       <button className="view-btn" onClick={handleViewDetails}>

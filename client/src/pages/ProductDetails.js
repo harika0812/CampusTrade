@@ -86,10 +86,13 @@
 //     </div>
 //   );
 // }
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { fetchProductById } from "../api/product.api";
+import { addToCart } from "../api/cart.api";
 import { useAuth } from "../app/authContext";
+import CartToast from "../components/CartToast";
+import { resolveServerAssetUrl } from "../utils/runtimeConfig";
 
 export default function ProductDetails() {
   const { id } = useParams();
@@ -99,20 +102,35 @@ export default function ProductDetails() {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [toast, setToast] = useState({ message: "", type: "success" });
+  const imageRef = useRef(null);
+
+  const sellerId = product?.sellerId?._id || product?.sellerId;
+  const userId = user?._id || user?.id || user?.userId;
+  const isOwner = !!sellerId && !!userId && String(sellerId) === String(userId);
+  const availableCopies = Number(product?.availableCopies ?? 1);
+  const purchasableCopies = Number(product?.purchasableCopies ?? availableCopies);
+  const stockStatus = product?.stockStatus || (product?.isSold || availableCopies <= 0
+    ? "sold_out"
+    : purchasableCopies <= 0
+    ? "reserved"
+    : "available");
+  const listingType = product?.listingType || "sell";
+  const isBuyListing = listingType === "sell" || listingType === "both";
+  const isUnavailable = !!product && (stockStatus !== "available" || purchasableCopies <= 0);
 
   const contactSeller = () => {
-    const sellerId = product?.sellerId?._id || product?.sellerId;
-    const userId = user?._id || user?.id || user?.userId;
-    if (sellerId && userId && String(sellerId) === String(userId)) {
+    if (isOwner) {
       return;
     }
-    if (!sellerId || !product?._id) return;
-    const sellerName = product?.sellerName || "Seller";
-    const productTitle = product?.title || "";
+    if (!sellerId) return;
+    const rawName = String(product?.sellerName || "Seller").trim();
+    const firstName = rawName.split(/\s+/)[0] || "Seller";
+    const rollNo = String(product?.sellerRollNo || "").trim();
+    const sellerName = rollNo ? `${rollNo} - ${firstName}` : firstName;
     navigate(
-      `/chat?user=${sellerId}&product=${product._id}&name=${encodeURIComponent(
-        sellerName
-      )}&title=${encodeURIComponent(productTitle)}`
+      `/chat?user=${sellerId}&name=${encodeURIComponent(sellerName)}`
     );
   };
 
@@ -131,6 +149,11 @@ export default function ProductDetails() {
     loadProduct();
   }, [loadProduct]);
 
+  useEffect(() => {
+    if (!imageRef.current) return;
+    imageRef.current.style.transform = `scale(${zoomLevel})`;
+  }, [zoomLevel]);
+
   const handleWheel = (e) => {
     e.preventDefault();
     if (e.deltaY < 0) {
@@ -140,60 +163,111 @@ export default function ProductDetails() {
     }
   };
 
-  if (loading) return <p style={{ textAlign: "center" }}>Loading...</p>;
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast({ message: "", type: "success" });
+    }, 1800);
+  };
+
+  const handleAddToCart = async () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (!product?._id || isOwner || isUnavailable) {
+      return;
+    }
+
+    try {
+      setAddingToCart(true);
+      await addToCart(product._id, 1);
+      showToast("Added to cart");
+    } catch (error) {
+      showToast(error?.response?.data?.message || "Failed to add to cart", "error");
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  if (loading) return <p className="pd-loading">Loading...</p>;
   if (!product) return <p>Product not found 😕</p>;
 
   return (
-    <div className="product-details container page">
-      <div className="pd-media">
-        <img
-          src={`http://localhost:5000/${product.images[0]}`}
-          alt={product.title}
-          className="pd-image"
-          style={{
-            transform: `scale(${zoomLevel})`,
-            cursor: zoomLevel > 1 ? "zoom-out" : "zoom-in"
-          }}
-          onWheel={handleWheel}
-        />
+    <div className="container page page-shell pd-wrap">
+      <div className="product-details">
+        <div className="pd-media">
+          <img
+            src={resolveServerAssetUrl(product.images?.[0])}
+            alt={product.title}
+            className="pd-image"
+            ref={imageRef}
+            onWheel={handleWheel}
+          />
+        </div>
+
+        <div className="pd-info">
+          <div className="pd-header">
+            <h1 className="pd-title">{product.title}</h1>
+            <div className="pd-price">₹ {product.price}</div>
+          </div>
+
+          <p className="pd-desc">{product.description || "No description provided."}</p>
+
+          <div className="pd-meta">
+            <p className="pd-meta-row">
+              <span className="pd-meta-label">Category</span>
+              <span className="pd-meta-value">{product.category || "General"}</span>
+            </p>
+            <p className="pd-meta-row">
+              <span className="pd-meta-label">Available copies</span>
+              <span className="pd-meta-value">{Math.max(0, purchasableCopies)}</span>
+            </p>
+          </div>
+
+          {listingType === "lend" ? (
+            <div className="pd-lending-note">
+              <p>This item is available only for lending.</p>
+            </div>
+          ) : null}
+
+          {listingType === "sell" ? (
+            <div className="pd-lending-note">
+              <p>This item is available only for purchase.</p>
+            </div>
+          ) : null}
+
+          {listingType === "both" ? (
+            <div className="pd-lending-note">
+              <p>This item is available for both lending and purchase.</p>
+            </div>
+          ) : null}
+
+          <div className="pd-seller">
+            <p className="pd-seller-label">Seller</p>
+            <p className="pd-seller-name">{product.sellerName || "Student"}</p>
+            <p className="pd-seller-note">Verified student • {product.sellerRollNo || "N/A"}</p>
+            <p className="pd-seller-details">
+              {product.seller?.className || "N/A"} • {product.seller?.branch || product.seller?.department || "N/A"} • Year {product.seller?.year || "N/A"}
+            </p>
+          </div>
+
+          <div className="pd-actions">
+            <button className="btn btn-primary" onClick={contactSeller} disabled={isOwner}>
+              {isOwner ? "Your listing" : "Contact Seller"}
+            </button>
+
+            {(!isOwner && isBuyListing && !isUnavailable) ? (
+              <button className="btn btn-outline" onClick={handleAddToCart} disabled={addingToCart}>
+                {addingToCart ? "Adding..." : "Add to Cart"}
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
 
-      <div className="pd-info">
-        <div className="pd-header">
-          <h1 className="pd-title">{product.title}</h1>
-          <div className="pd-price">₹ {product.price}</div>
-        </div>
-
-        <p className="pd-desc">{product.description}</p>
-
-        <div className="pd-meta">
-          <span className="meta-chip">{product.category || "General"}</span>
-          <span className="meta-chip">{product.sellerName || "Student"}</span>
-          <span className={`status-chip ${product.isSold ? "sold" : "available"}`}>
-            {product.isSold ? "Sold" : "Available"}
-          </span>
-        </div>
-
-        <div className="pd-actions">
-          <button
-            className="btn btn-primary"
-            onClick={contactSeller}
-            disabled={
-              !!product?.sellerId &&
-              !!user &&
-              String(product?.sellerId?._id || product?.sellerId) ===
-                String(user?._id || user?.id || user?.userId)
-            }
-          >
-            {product?.sellerId &&
-            user &&
-            String(product?.sellerId?._id || product?.sellerId) ===
-              String(user?._id || user?.id || user?.userId)
-              ? "Your listing"
-              : "Contact Seller 💬"}
-          </button>
-        </div>
-      </div>
+      <CartToast message={toast.message} type={toast.type} />
     </div>
   );
 }

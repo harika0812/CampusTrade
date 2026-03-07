@@ -111,6 +111,10 @@ export const deleteProduct = async (id) => {
   const res = await API.delete(`/products/${id}`);
   return res.data;
 }
+export const updateProduct = async (id, productData) => {
+  const res = await API.put(`/products/${id}`, productData);
+  return res.data;
+}
 export const fetchMyProducts = async () => {
   const response = await API.get("/products/mine");
   return response.data;
