@@ -223,17 +223,20 @@ const Register = () => {
     });
     const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorList, setErrorList] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState("");
 
   const handleChange = (e) => {
       setFormData({ ...formData, [e.target.name]: e.target.value });
-      if (errorMessage) setErrorMessage("");
+    if (errorMessage) setErrorMessage("");
+    if (errorList.length) setErrorList([]);
   };
   
   const handleSubmit = async (e) => {
       e.preventDefault();
       setErrorMessage("");
+      setErrorList([]);
       setSuccessMessage("");
       setIsSubmitting(true);
       
@@ -243,11 +246,20 @@ const Register = () => {
         setSuccessMessage(response?.data?.message || "Verification email sent");
         } catch (error) {
             const data = error.response?.data;
-            const validationDetails = Array.isArray(data?.errors)
-              ? data.errors.map((item) => item.message).join("\n")
-              : data?.details;
-            const message = validationDetails || data?.message || "Registration failed";
-            setErrorMessage(String(message).replace(/https?:\/\/localhost:\d+/gi, "this app"));
+            const normalized = Array.isArray(data?.errors)
+              ? data.errors
+                  .map((item) => String(item?.message || "").trim())
+                  .filter(Boolean)
+              : [];
+
+            if (normalized.length) {
+              setErrorList(normalized);
+              setErrorMessage("Please correct the highlighted details and try again.");
+            } else {
+              const rawMessage = data?.details || data?.message || "Registration failed";
+              const message = String(rawMessage).replace(/https?:\/\/localhost:\d+/gi, "this app");
+              setErrorMessage(message);
+            }
         } finally {
           setIsSubmitting(false);
         }
@@ -261,7 +273,14 @@ const Register = () => {
 
         {errorMessage ? (
           <div className="auth-error-banner" role="alert" aria-live="polite">
-            {errorMessage}
+            <p className="auth-error-title">{errorMessage}</p>
+            {errorList.length > 0 ? (
+              <ul className="auth-error-list">
+                {errorList.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 
@@ -288,7 +307,7 @@ const Register = () => {
           <input
             name="email"
             type="email"
-            placeholder="College email"
+            placeholder="College email (example: 23251a05l3@gnits.ac.in)"
             value={formData.email}
             onChange={handleChange}
             autoComplete="email"
@@ -307,7 +326,7 @@ const Register = () => {
             required
             />
 
-          <p className="auth-field-help">Password must include uppercase, lowercase, and a number.</p>
+          <p className="auth-field-help">Use your GNITS email. Password must include uppercase, lowercase, and a number.</p>
 
           <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Creating account..." : "Register"}

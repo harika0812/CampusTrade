@@ -4,6 +4,15 @@ import { useAuth } from "../app/authContext";
 import { fetchAllProducts } from "../api/product.api";
 import { resolveServerAssetUrl } from "../utils/runtimeConfig";
 
+const FALLBACK_PRODUCT_IMAGE =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='800' viewBox='0 0 600 800'%3E%3Crect width='600' height='800' fill='%230d1b3d'/%3E%3Ctext x='50%25' y='50%25' fill='%239fb3d9' font-family='Arial' font-size='32' text-anchor='middle' dominant-baseline='middle'%3ECampusTrade%3C/text%3E%3C/svg%3E";
+
+const handleImageFallback = (event) => {
+  if (event.currentTarget.dataset.fallbackApplied === "true") return;
+  event.currentTarget.dataset.fallbackApplied = "true";
+  event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
+};
+
 const Landing = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -87,11 +96,16 @@ const Landing = () => {
     }, {});
 
     const rankedLive = Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]);
+      })
       .slice(0, 10)
       .map(([category]) => category);
 
-    const merged = [...new Set([...rankedLive, ...campusDefaults])];
+    // Keep the first view stable: always show campus defaults first,
+    // then append live categories not already present.
+    const merged = [...new Set([...campusDefaults, ...rankedLive])];
     return merged.slice(0, 8);
   }, [visibleProducts]);
 
@@ -242,9 +256,20 @@ const Landing = () => {
                 <article className="landing-arrival-item">
                   <div className="landing-arrival-thumb" aria-hidden="true">
                     {item.imageUrl ? (
-                      <img src={item.imageUrl} alt={item.title} className="landing-arrival-thumb-image" />
+                      <img
+                        src={item.imageUrl}
+                        alt={item.title}
+                        className="landing-arrival-thumb-image"
+                        loading="lazy"
+                        onError={handleImageFallback}
+                      />
                     ) : (
-                      "🎧"
+                      <img
+                        src={FALLBACK_PRODUCT_IMAGE}
+                        alt={item.title}
+                        className="landing-arrival-thumb-image"
+                        loading="lazy"
+                      />
                     )}
                   </div>
                   <p className="landing-arrival-title">{item.title}</p>

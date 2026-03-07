@@ -209,13 +209,15 @@
 //   }
 // };
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import API from "../api/axios";
 import { useAuth } from "../app/authContext";
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+  const redirectTo = location.state?.from || "/marketplace";
 
   const [formData, setFormData] = useState({
     email: "",
@@ -239,7 +241,7 @@ const Login = () => {
 
       login(res.data.user, res.data.token);
 
-      navigate("/marketplace");
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       const apiMessage = error?.response?.data?.message || "Login failed";
       setErrorMessage(apiMessage.replace(/https?:\/\/localhost:\d+/gi, "this app"));

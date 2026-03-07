@@ -299,10 +299,12 @@ const CreateListing = () => {
   const [loading, setLoading] = useState(false);
   const [showPostedCelebration, setShowPostedCelebration] = useState(false);
   const [hasRequiredProfileDetails, setHasRequiredProfileDetails] = useState(false);
+  const [isProfileCheckLoading, setIsProfileCheckLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     const loadProfile = async () => {
+      if (active) setIsProfileCheckLoading(true);
       try {
         const data = await getMyProfile();
         const rollNo = String(data?.user?.rollNo || "").trim();
@@ -312,6 +314,8 @@ const CreateListing = () => {
         if (active) setHasRequiredProfileDetails(Boolean(rollNo && className && branch && year));
       } catch {
         if (active) setHasRequiredProfileDetails(false);
+      } finally {
+        if (active) setIsProfileCheckLoading(false);
       }
     };
     loadProfile();
@@ -338,6 +342,11 @@ const CreateListing = () => {
 
     if (!image) {
       alert("Please upload a product image 📸");
+      return;
+    }
+
+    if (isProfileCheckLoading) {
+      alert("Checking your profile. Please try again in a moment.");
       return;
     }
 
@@ -414,7 +423,11 @@ const CreateListing = () => {
       <h2 className="sell-heading">{formData.listingType === "lend" ? "Lend a Product" : "Sell a Product"}</h2>
       <p className="sell-subcopy">Post clear details so buyers and borrowers can trust your listing quickly.</p>
 
-      {!hasRequiredProfileDetails ? (
+      {isProfileCheckLoading ? (
+        <div className="sell-blocker" role="status" aria-live="polite">
+          <p>Checking profile details...</p>
+        </div>
+      ) : !hasRequiredProfileDetails ? (
         <div className="sell-blocker" role="alert">
           <p>Update profile before listing item.</p>
           <button type="button" className="btn btn-outline sell-blocker-btn" onClick={() => navigate("/profile")}>Go to Edit Profile</button>
