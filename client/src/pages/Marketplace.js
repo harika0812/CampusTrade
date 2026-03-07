@@ -5,6 +5,15 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../app/authContext";
 import { resolveServerAssetUrl } from "../utils/runtimeConfig";
 
+const FALLBACK_PRODUCT_IMAGE =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='800' viewBox='0 0 600 800'%3E%3Crect width='600' height='800' fill='%230d1b3d'/%3E%3Ctext x='50%25' y='50%25' fill='%239fb3d9' font-family='Arial' font-size='32' text-anchor='middle' dominant-baseline='middle'%3ECampusTrade%3C/text%3E%3C/svg%3E";
+
+const handleImageFallback = (event) => {
+  if (event.currentTarget.dataset.fallbackApplied === "true") return;
+  event.currentTarget.dataset.fallbackApplied = "true";
+  event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
+};
+
 export default function Marketplace() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -208,10 +217,12 @@ export default function Marketplace() {
                   src={
                     product.images?.[0]
                       ? resolveServerAssetUrl(product.images[0])
-                      : "https://via.placeholder.com/600x800?text=CampusTrade"
+                      : FALLBACK_PRODUCT_IMAGE
                   }
                   alt={product.title}
                   className="product-image"
+                  loading="lazy"
+                  onError={handleImageFallback}
                 />
               </div>
 
