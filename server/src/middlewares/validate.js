@@ -30,20 +30,20 @@ export const validateRegister = [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required')
-    .isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters')
-    .matches(/^[a-zA-Z\s]+$/).withMessage('Name can only contain letters and spaces'),
+    .isLength({ min: 2, max: 120 }).withMessage('Name must be 2-120 characters')
+    .matches(/^[A-Za-z][A-Za-z\s.'-]*$/).withMessage('Name can contain letters, spaces, apostrophe, dot, and hyphen'),
   
   body('email')
     .trim()
     .toLowerCase()
     .notEmpty().withMessage('Email is required')
     .isEmail().withMessage('Invalid email format')
-    .matches(/@gnits\.ac\.in$/).withMessage('Only GNITS emails allowed'),
+    .matches(/@gnits\.ac\.in$/).withMessage('Use your college email ending with @gnits.ac.in'),
   
   body('password')
     .notEmpty().withMessage('Password is required')
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain uppercase, lowercase, and number'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
   
   handleValidationErrors
 ];

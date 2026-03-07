@@ -3589,3 +3589,23 @@ body,
   transition: background-color 9999s ease-out 0s;
 }
 
+.auth-page .auth-field-help {
+  color: #334155 !important;
+  font-weight: 500;
+}
+
+.auth-error-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.auth-error-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.auth-error-list li {
+  margin: 4px 0;
+  line-height: 1.4;
+}
+

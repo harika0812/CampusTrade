@@ -22,15 +22,19 @@ const buildUserPayload = (user) => ({
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const name = String(req.body?.name || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
 
     if (!email.endsWith("@gnits.ac.in")) {
-      return res.status(400).json({ message: "Only GNITS emails allowed" });
+      return res.status(400).json({ message: "Use your college email ending with @gnits.ac.in" });
     }
-const rollNo = email.split('@')[0];
-    const rollNoRegex = /^23\d{3}[a-z]\d{2}[a-z]\d$/;
+    const rollNo = email.split('@')[0];
+    const rollNoRegex = /^[a-z0-9._-]{3,32}$/i;
     if (!rollNoRegex.test(rollNo)) {
-      return res.status(400).json({ message: 'Invalid roll number format' });
+      return res.status(400).json({
+        message: "Use a valid college email format like rollnumber@gnits.ac.in",
+      });
     }
     if (!name || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
