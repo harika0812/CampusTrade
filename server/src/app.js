@@ -33,6 +33,10 @@ import { securityMiddleware } from "./middlewares/validate.js";
 
 const app = express();
 
+// Render/hosting platforms sit behind reverse proxies. Trust the first proxy
+// so req.ip is the real client IP for rate limiting.
+app.set("trust proxy", 1);
+
 // CORS configuration - restrict to frontend only
 const corsOptions = {
   origin: process.env.CLIENT_URL || "http://localhost:3000",
