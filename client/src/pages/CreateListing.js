@@ -275,10 +275,11 @@
 // };
 
 // export default CreateListing;
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createProduct } from "../api/product.api";
 import "../styles/CreateListing.css";
 import { useNavigate } from "react-router-dom"; // Add this import
+import { getMyProfile } from "../api/user.api";
 
 const CreateListing = () => {
   const navigate = useNavigate(); // Add this
@@ -286,16 +287,44 @@ const CreateListing = () => {
     title: "",
     description: "",
     price: "",
+    availableCopies: 1,
+    listingType: "sell",
+    borrowFee: "",
+    maxDurationDays: 7,
+    lendingTerms: "",
     category: "Others",
   });
 
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPostedCelebration, setShowPostedCelebration] = useState(false);
+  const [hasRequiredProfileDetails, setHasRequiredProfileDetails] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadProfile = async () => {
+      try {
+        const data = await getMyProfile();
+        const rollNo = String(data?.user?.rollNo || "").trim();
+        const className = String(data?.user?.className || "").trim();
+        const branch = String(data?.user?.branch || "").trim();
+        const year = String(data?.user?.year || "").trim();
+        if (active) setHasRequiredProfileDetails(Boolean(rollNo && className && branch && year));
+      } catch {
+        if (active) setHasRequiredProfileDetails(false);
+      }
+    };
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Handle text inputs
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    const nextValue = name === "category" ? value.replace(/\s+/g, "") : value;
+    setFormData({ ...formData, [name]: nextValue });
   };
 
   // Handle image input
@@ -312,6 +341,12 @@ const CreateListing = () => {
       return;
     }
 
+    if (!hasRequiredProfileDetails) {
+      alert("Update profile before listing item.");
+      navigate("/profile");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -320,6 +355,19 @@ const CreateListing = () => {
       data.append("title", formData.title);
       data.append("description", formData.description);
       data.append("price", formData.price);
+      data.append("availableCopies", formData.availableCopies);
+      data.append("listingType", formData.listingType);
+      data.append("paymentOption", "cod");
+
+      if (formData.listingType === "both") {
+        data.append("borrowFee", formData.borrowFee);
+      }
+
+      if (formData.listingType === "lend" || formData.listingType === "both") {
+        data.append("maxDurationDays", formData.maxDurationDays);
+        data.append("lendingTerms", formData.lendingTerms);
+      }
+
       data.append("category", formData.category);
       data.append("image", image);
 
@@ -332,12 +380,19 @@ const CreateListing = () => {
         title: "",
         description: "",
         price: "",
+        availableCopies: 1,
+        listingType: "sell",
+        borrowFee: "",
+        maxDurationDays: 7,
+        lendingTerms: "",
         category: "Others",
       });
       setImage(null);
       navigate("/my-listings"); // Add this to navigate to my listings
     } catch (error) {
-      alert(error.response?.data?.message || "Something went wrong");
+      const details = error?.response?.data?.details;
+      const message = error?.response?.data?.message;
+      alert(details || message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -356,56 +411,164 @@ const CreateListing = () => {
           <p className="celebration-subtitle">Your campus is about to find a great deal.</p>
         </div>
       </div>
-      <h2>Sell a Product 🛒</h2>
+      <h2 className="sell-heading">{formData.listingType === "lend" ? "Lend a Product" : "Sell a Product"}</h2>
+      <p className="sell-subcopy">Post clear details so buyers and borrowers can trust your listing quickly.</p>
+
+      {!hasRequiredProfileDetails ? (
+        <div className="sell-blocker" role="alert">
+          <p>Update profile before listing item.</p>
+          <button type="button" className="btn btn-outline sell-blocker-btn" onClick={() => navigate("/profile")}>Go to Edit Profile</button>
+        </div>
+      ) : null}
 
       <form className="sell-form" onSubmit={handleSubmit}>
+        <label className="field-label" htmlFor="listingType">
+          What do you want to do?
+        </label>
+        <p className="field-help">
+          Choose <strong>Sell</strong> if ownership transfers. Choose <strong>Lend</strong> if you expect the item back.
+        </p>
+        <select
+          id="listingType"
+          name="listingType"
+          value={formData.listingType}
+          onChange={handleChange}
+        >
+          <option value="sell">Sell (one-time purchase)</option>
+          <option value="lend">Lend (temporary borrowing)</option>
+          <option value="both">Both (sell or lend)</option>
+        </select>
+
+        <label className="field-label" htmlFor="title">
+          Item name
+        </label>
+
         <input
+          id="title"
           type="text"
           name="title"
-          placeholder="Product title"
+          placeholder="Example: Scientific Calculator"
           value={formData.title}
           onChange={handleChange}
           required
         />
 
+        <label className="field-label" htmlFor="description">
+          Description
+        </label>
         <textarea
+          id="description"
           name="description"
-          placeholder="Product description"
+          placeholder="Condition, brand, model, and anything buyer/borrower should know"
           value={formData.description}
           onChange={handleChange}
           required
         />
 
+        <label className="field-label" htmlFor="price">
+          {formData.listingType === "lend" ? "Borrowing fee (₹)" : "Selling price (₹)"}
+        </label>
         <input
+          id="price"
           type="number"
           name="price"
-          placeholder="Price (₹)"
+          placeholder={formData.listingType === "lend" ? "Example: 50" : "Example: 2500"}
           value={formData.price}
           onChange={handleChange}
           required
         />
 
-        <select
+        {formData.listingType === "both" ? (
+          <>
+            <label className="field-label" htmlFor="borrowFee">
+              Borrowing fee (₹)
+            </label>
+            <input
+              id="borrowFee"
+              type="number"
+              name="borrowFee"
+              placeholder="Example: 50"
+              value={formData.borrowFee}
+              min={0}
+              onChange={handleChange}
+              required
+            />
+          </>
+        ) : null}
+
+        <label className="field-label" htmlFor="availableCopies">
+          How many copies are available?
+        </label>
+        <p className="field-help">If only 1 copy exists, enter 1.</p>
+        <input
+          id="availableCopies"
+          type="number"
+          name="availableCopies"
+          placeholder="Available copies"
+          value={formData.availableCopies}
+          min={1}
+          onChange={handleChange}
+          required
+        />
+
+        {formData.listingType === "lend" || formData.listingType === "both" ? (
+          <>
+            <label className="field-label" htmlFor="maxDurationDays">
+              Maximum borrow duration (days)
+            </label>
+            <input
+              id="maxDurationDays"
+              type="number"
+              name="maxDurationDays"
+              placeholder="Max lending duration (days)"
+              value={formData.maxDurationDays}
+              min={1}
+              onChange={handleChange}
+              required
+            />
+
+            <label className="field-label" htmlFor="lendingTerms">
+              Lending terms (optional)
+            </label>
+            <textarea
+              id="lendingTerms"
+              name="lendingTerms"
+              placeholder="Optional: write your lending rules here. Example: Return within 7 days, return in good condition, no damage, include charger, late return fee ₹50/day."
+              value={formData.lendingTerms}
+              onChange={handleChange}
+              rows={3}
+            />
+          </>
+        ) : null}
+
+        <label className="field-label" htmlFor="category">
+          Category
+        </label>
+        <input
+          id="category"
+          type="text"
           name="category"
+          placeholder="Example: Books"
           value={formData.category}
           onChange={handleChange}
-        >
-          <option>Books</option>
-          <option>Electronics</option>
-          <option>Lab Equipment</option>
-          <option>Notes</option>
-          <option>Others</option>
-        </select>
+          autoComplete="off"
+          required
+        />
 
-        {/* ✅ IMAGE INPUT */}
+        <label className="field-label" htmlFor="listingImage">
+          Product image
+        </label>
+        <p className="field-help">Use a clear photo of the actual item for faster responses.</p>
         <input
+          id="listingImage"
+          className="sell-file-input"
           type="file"
           accept="image/*"
           onChange={handleImageChange}
           required
         />
 
-        <button disabled={loading}>
+        <button className="btn btn-primary sell-submit-btn" disabled={loading}>
           {loading ? "Listing..." : "Create Listing"}
         </button>
       </form>

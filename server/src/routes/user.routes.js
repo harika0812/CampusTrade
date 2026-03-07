@@ -114,14 +114,11 @@
 
 import express from "express";
 import { protect } from "../middlewares/auth.middleware.js";
+import { getProfile, updateProfile } from "../controllers/user.controller.js";
 
 const router = express.Router();
 
-router.get("/me", protect, (req, res) => {
-  res.json({
-    message: "Protected route accessed",
-    user: req.user
-  });
-});
+router.get("/me", protect, getProfile);
+router.put("/profile", protect, updateProfile);
 
 export default router;

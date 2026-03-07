@@ -215,35 +215,36 @@ import { useAuth } from "../app/authContext";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth(); // ✅ USE THIS
+  const { login } = useAuth();
 
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   });
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (errorMessage) setErrorMessage("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMessage("");
+    setIsSubmitting(true);
 
     try {
       const res = await API.post("/auth/login", formData);
 
-      // ✅ SET AUTH CONTEXT (fixed to match backend response)
-      login(
-        {
-          id: res.data.user.id,
-          name: res.data.user.name
-        },
-        res.data.token
-      );
+      login(res.data.user, res.data.token);
 
       navigate("/marketplace");
     } catch (error) {
-      alert(error.response?.data?.message || "Login failed");
+      const apiMessage = error?.response?.data?.message || "Login failed";
+      setErrorMessage(apiMessage.replace(/https?:\/\/localhost:\d+/gi, "this app"));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -253,12 +254,20 @@ const Login = () => {
         <h2 className="auth-title">Welcome to CampusTrade</h2>
         <p className="auth-subtitle">Sign in to access your campus marketplace</p>
 
+        {errorMessage ? (
+          <div className="auth-error-banner" role="alert" aria-live="polite">
+            {errorMessage}
+          </div>
+        ) : null}
+
         <form className="auth-form" onSubmit={handleSubmit}>
           <input
             name="email"
             type="email"
             placeholder="College email"
+            value={formData.email}
             onChange={handleChange}
+            autoComplete="email"
             className="auth-input"
             required
           />
@@ -267,13 +276,21 @@ const Login = () => {
             name="password"
             type="password"
             placeholder="Password"
+            value={formData.password}
             onChange={handleChange}
+            autoComplete="current-password"
             className="auth-input"
             required
           />
 
-          <button className="btn btn-primary" type="submit">Login</button>
+          <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : "Login"}
+          </button>
         </form>
+
+        <p className="auth-footer">
+          <Link to="/forgot-password">Forgot password?</Link>
+        </p>
 
         <p className="auth-footer">
           Don’t have an account? <Link to="/register">Register</Link>

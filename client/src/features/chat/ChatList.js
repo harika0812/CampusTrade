@@ -1,55 +1,173 @@
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import { getConversations } from "../../api/chat.api";
+import { Trash2 } from "lucide-react";
+import { deleteConversation, getConversations } from "../../api/chat.api";
+import { SOCKET_URL } from "../../utils/runtimeConfig";
 
-const socket = io(process.env.REACT_APP_SOCKET_URL || "http://localhost:5000", {
+const CHAT_UNREAD_UPDATED_EVENT = "chat-unread-updated";
+
+const socket = io(SOCKET_URL, {
   autoConnect: false
 });
 
+const formatChatName = (user) => {
+  const rawName = String(user?.name || "User").trim();
+  const displayName = rawName || "User";
+  const rollNo = String(user?.rollNo || "").trim();
+  return rollNo ? `${rollNo} - ${displayName}` : displayName;
+};
+
 const ChatList = ({ userId, onSelect }) => {
   const [convos, setConvos] = useState([]);
+  const [lastError, setLastError] = useState("");
+  const [deletingUserId, setDeletingUserId] = useState("");
+  const [contextMenuUserId, setContextMenuUserId] = useState("");
 
   useEffect(() => {
     if (!userId) return;
-    const load = () => getConversations(userId).then(setConvos);
+    let isLoading = false;
+    let isUnmounted = false;
+    let blockedUntil = 0;
+
+    const load = async () => {
+      if (isLoading || Date.now() < blockedUntil || isUnmounted) return;
+      isLoading = true;
+      try {
+        const data = await getConversations(userId);
+        if (!isUnmounted) {
+          setConvos(data);
+          setLastError("");
+        }
+      } catch (error) {
+        const isRateLimited = error?.response?.status === 429;
+        if (isRateLimited) {
+          blockedUntil = Date.now() + 30_000;
+          if (!isUnmounted) {
+            setLastError("Too many requests. Retrying in 30 seconds...");
+          }
+        } else if (!isUnmounted) {
+          setLastError("Failed to load conversations.");
+        }
+      } finally {
+        isLoading = false;
+      }
+    };
+
     load();
     if (!socket.connected) socket.connect();
     const onNewMessage = () => load();
+    const onMessagesReadUpdate = () => load();
+    
     socket.on("newMessage", onNewMessage);
+    socket.on("messagesReadUpdate", onMessagesReadUpdate);
 
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, 20000);
     return () => {
+      isUnmounted = true;
       clearInterval(t);
       socket.off("newMessage", onNewMessage);
+      socket.off("messagesReadUpdate", onMessagesReadUpdate);
     };
   }, [userId]);
+
+  useEffect(() => {
+    const closeMenu = () => setContextMenuUserId("");
+    const onEscape = (event) => {
+      if (event.key === "Escape") setContextMenuUserId("");
+    };
+
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu);
+    window.addEventListener("keydown", onEscape);
+
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu);
+      window.removeEventListener("keydown", onEscape);
+    };
+  }, []);
+
+  const handleDeleteConversation = async (otherUserId, otherUserName) => {
+    const confirmed = window.confirm(`Delete chat with ${otherUserName}? This cannot be undone.`);
+    if (!confirmed || !userId || !otherUserId) return;
+
+    try {
+      setDeletingUserId(otherUserId);
+      await deleteConversation({ userId, otherUserId });
+      setConvos((prev) => prev.filter((conversation) => conversation._id !== otherUserId));
+    } catch {
+      setLastError("Failed to delete conversation.");
+    } finally {
+      setDeletingUserId("");
+      setContextMenuUserId("");
+    }
+  };
+
+  const openContextMenu = (event, otherUserId) => {
+    event.preventDefault();
+    setContextMenuUserId(otherUserId);
+  };
+
+  const handleSelectConversation = (otherUserId, otherUserName) => {
+    setConvos((prev) =>
+      prev.map((conversation) =>
+        conversation._id === otherUserId
+          ? { ...conversation, unreadCount: 0 }
+          : conversation
+      )
+    );
+    window.dispatchEvent(new Event(CHAT_UNREAD_UPDATED_EVENT));
+    onSelect({ otherUserId, name: otherUserName });
+  };
 
   return (
     <div className="chat-list">
       <h3>Chats</h3>
+      {lastError && <div className="muted">{lastError}</div>}
       {convos.length === 0 && <div className="muted">No conversations yet</div>}
       {convos.map((c) => {
         const msg = c.lastMessage;
-        const otherUserId = c._id.otherUser;
-        const productId = c._id.product;
-        const otherUserName = c.otherUser?.name || "User";
-        const productTitle = msg?.product?.title || c.product?.title || "";
+        const otherUserId = c._id;
+        const otherUserName = formatChatName(c.otherUser);
+        const unreadCount = c.unreadCount || 0;
 
         return (
-          <button
-            key={`${otherUserId}_${productId || "none"}`}
-            className="chat-list-item"
-            onClick={() =>
-              onSelect({ otherUserId, productId, name: otherUserName, productTitle })
-            }
-          >
-            <div className="chat-title">
-              {otherUserName}
-            </div>
-            <div className="chat-preview">
-              {msg?.product?.title ? `Item: ${msg.product.title} • ${msg.message}` : msg?.message}
-            </div>
-          </button>
+          <div key={otherUserId} className="chat-list-row">
+            <button
+              className="chat-list-item"
+              onContextMenu={(event) => openContextMenu(event, otherUserId)}
+              onClick={() => handleSelectConversation(otherUserId, otherUserName)}
+            >
+              <div className="chat-title">
+                {otherUserName}
+                {unreadCount > 0 && (
+                  <span className="unread-badge">{unreadCount}</span>
+                )}
+              </div>
+              <div className="chat-preview">
+                {msg?.message || "No messages yet"}
+              </div>
+            </button>
+
+            {contextMenuUserId === otherUserId && (
+              <div
+                role="menu"
+                className="chat-context-menu"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="btn btn-outline chat-context-delete"
+                  aria-label="Delete chat"
+                  title="Delete chat"
+                  onClick={() => handleDeleteConversation(otherUserId, otherUserName)}
+                  disabled={deletingUserId === otherUserId}
+                >
+                  {deletingUserId === otherUserId ? "..." : <Trash2 size={14} strokeWidth={1.8} />}
+                </button>
+              </div>
+            )}
+          </div>
         );
       })}
     </div>

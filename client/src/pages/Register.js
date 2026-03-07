@@ -212,31 +212,44 @@
 //   }
 // };
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import API from "../api/axios";
 
 const Register = () => {
-    const navigate = useNavigate();
-    
     const [formData, setFormData] = useState({
         name: "",
         email: "",
         password: ""
     });
+    const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const handleChange = (e) => {
       setFormData({ ...formData, [e.target.name]: e.target.value });
+      if (errorMessage) setErrorMessage("");
   };
   
   const handleSubmit = async (e) => {
       e.preventDefault();
+      setErrorMessage("");
+      setSuccessMessage("");
+      setIsSubmitting(true);
       
       try {
-          await API.post("/auth/register", formData);
-          alert("Registration successful! Please login.");
-          navigate("/login");
+        const response = await API.post("/auth/register", formData);
+        setRegisteredEmail(formData.email);
+        setSuccessMessage(response?.data?.message || "Verification email sent");
         } catch (error) {
-            alert(error.response?.data?.message || "Registration failed");
+            const data = error.response?.data;
+            const validationDetails = Array.isArray(data?.errors)
+              ? data.errors.map((item) => item.message).join("\n")
+              : data?.details;
+            const message = validationDetails || data?.message || "Registration failed";
+            setErrorMessage(String(message).replace(/https?:\/\/localhost:\d+/gi, "this app"));
+        } finally {
+          setIsSubmitting(false);
         }
     };
     
@@ -246,11 +259,28 @@ const Register = () => {
         <h2 className="auth-title">Create account</h2>
         <p className="auth-subtitle">Join the campus marketplace</p>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        {errorMessage ? (
+          <div className="auth-error-banner" role="alert" aria-live="polite">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {successMessage ? (
+          <div className="auth-success-banner" role="status" aria-live="polite">
+            <h3 className="auth-success-title">Verification email sent</h3>
+            <p className="auth-success-text">
+              A verification email has been sent to <strong>{registeredEmail}</strong>.
+            </p>
+            <p className="auth-success-text">Please check your inbox and click the link to continue to Marketplace.</p>
+          </div>
+        ) : (
+          <form className="auth-form" onSubmit={handleSubmit}>
           <input
             name="name"
             placeholder="Full name"
+            value={formData.name}
             onChange={handleChange}
+            autoComplete="name"
             className="auth-input"
             required
             />
@@ -259,7 +289,9 @@ const Register = () => {
             name="email"
             type="email"
             placeholder="College email"
+            value={formData.email}
             onChange={handleChange}
+            autoComplete="email"
             className="auth-input"
             required
             />
@@ -268,13 +300,20 @@ const Register = () => {
             name="password"
             type="password"
             placeholder="Password"
+            value={formData.password}
             onChange={handleChange}
+            autoComplete="new-password"
             className="auth-input"
             required
             />
 
-          <button className="btn btn-primary" type="submit">Register</button>
-        </form>
+          <p className="auth-field-help">Password must include uppercase, lowercase, and a number.</p>
+
+          <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Creating account..." : "Register"}
+          </button>
+          </form>
+        )}
 
         <p className="auth-footer">
           Already have an account? <Link to="/login">Login</Link>

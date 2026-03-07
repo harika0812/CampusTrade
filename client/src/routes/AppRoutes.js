@@ -16,8 +16,16 @@ const AppRoutes = () => {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/marketplace" element={<Marketplace />} />
       <Route path="/products/:id" element={<ProductDetails />} />
+
+      <Route
+        path="/marketplace"
+        element={
+          <PrivateRoute>
+            <Marketplace />
+          </PrivateRoute>
+        }
+      />
 
       {/* Protected */}
       <Route
