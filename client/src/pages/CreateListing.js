@@ -300,6 +300,7 @@ const CreateListing = () => {
   const [showPostedCelebration, setShowPostedCelebration] = useState(false);
   const [hasRequiredProfileDetails, setHasRequiredProfileDetails] = useState(false);
   const [isProfileCheckLoading, setIsProfileCheckLoading] = useState(true);
+  const [feedback, setFeedback] = useState({ type: "", message: "" });
 
   useEffect(() => {
     let active = true;
@@ -329,6 +330,7 @@ const CreateListing = () => {
     const { name, value } = e.target;
     const nextValue = name === "category" ? value.replace(/\s+/g, "") : value;
     setFormData({ ...formData, [name]: nextValue });
+    if (feedback.message) setFeedback({ type: "", message: "" });
   };
 
   // Handle image input
@@ -341,17 +343,17 @@ const CreateListing = () => {
     e.preventDefault();
 
     if (!image) {
-      alert("Please upload a product image 📸");
+      setFeedback({ type: "error", message: "Please upload a product image." });
       return;
     }
 
     if (isProfileCheckLoading) {
-      alert("Checking your profile. Please try again in a moment.");
+      setFeedback({ type: "info", message: "Checking your profile. Please try again in a moment." });
       return;
     }
 
     if (!hasRequiredProfileDetails) {
-      alert("Update profile before listing item.");
+      setFeedback({ type: "error", message: "Update profile before listing item." });
       navigate("/profile");
       return;
     }
@@ -384,6 +386,7 @@ const CreateListing = () => {
 
       setShowPostedCelebration(true);
       setTimeout(() => setShowPostedCelebration(false), 2500);
+      setFeedback({ type: "success", message: "Listing created successfully." });
 
       setFormData({
         title: "",
@@ -401,7 +404,7 @@ const CreateListing = () => {
     } catch (error) {
       const details = error?.response?.data?.details;
       const message = error?.response?.data?.message;
-      alert(details || message || "Something went wrong");
+      setFeedback({ type: "error", message: details || message || "Something went wrong" });
     } finally {
       setLoading(false);
     }
@@ -422,6 +425,12 @@ const CreateListing = () => {
       </div>
       <h2 className="sell-heading">{formData.listingType === "lend" ? "Lend a Product" : "Sell a Product"}</h2>
       <p className="sell-subcopy">Post clear details so buyers and borrowers can trust your listing quickly.</p>
+
+      {feedback.message ? (
+        <div className={`sell-feedback ${feedback.type === "error" ? "error" : "success"}`} role="status" aria-live="polite">
+          {feedback.message}
+        </div>
+      ) : null}
 
       {isProfileCheckLoading ? (
         <div className="sell-blocker" role="status" aria-live="polite">
