@@ -31,6 +31,7 @@ const EditListing = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasRequiredProfileDetails, setHasRequiredProfileDetails] = useState(false);
+  const [feedback, setFeedback] = useState({ type: "", message: "" });
 
   useEffect(() => {
     let active = true;
@@ -56,7 +57,7 @@ const EditListing = () => {
         if (active) setHasRequiredProfileDetails(Boolean(rollNo && className && branch && year));
         setExistingImage(Array.isArray(product?.images) && product.images.length > 0 ? product.images[0] : "");
       } catch (error) {
-        alert(error?.response?.data?.message || "Failed to load listing");
+        setFeedback({ type: "error", message: error?.response?.data?.message || "Failed to load listing" });
         navigate("/my-listings");
       } finally {
         if (active) setLoading(false);
@@ -73,6 +74,7 @@ const EditListing = () => {
     const { name, value } = event.target;
     const nextValue = name === "category" ? value.replace(/\s+/g, "") : value;
     setFormData((prev) => ({ ...prev, [name]: nextValue }));
+    if (feedback.message) setFeedback({ type: "", message: "" });
   };
 
   const handleImageChange = (event) => {
@@ -83,7 +85,7 @@ const EditListing = () => {
     event.preventDefault();
 
     if (!hasRequiredProfileDetails) {
-      alert("Update profile before listing item.");
+      setFeedback({ type: "error", message: "Update profile before listing item." });
       navigate("/profile");
       return;
     }
@@ -112,12 +114,12 @@ const EditListing = () => {
       if (image) payload.append("image", image);
 
       await updateProduct(id, payload);
-      alert("Listing updated successfully");
+      setFeedback({ type: "success", message: "Listing updated successfully." });
       navigate("/my-listings");
     } catch (error) {
       const details = error?.response?.data?.details;
       const message = error?.response?.data?.message;
-      alert(details || message || "Failed to update listing");
+      setFeedback({ type: "error", message: details || message || "Failed to update listing" });
     } finally {
       setSaving(false);
     }
@@ -137,6 +139,12 @@ const EditListing = () => {
     <div className="sell-container">
       <h2 className="sell-heading">Edit Listing</h2>
       <p className="sell-subcopy">Update details below and keep your listing accurate for campus buyers.</p>
+
+      {feedback.message ? (
+        <div className={`sell-feedback ${feedback.type === "error" ? "error" : "success"}`} role="status" aria-live="polite">
+          {feedback.message}
+        </div>
+      ) : null}
 
       {!hasRequiredProfileDetails ? (
         <div className="sell-blocker" role="alert">
