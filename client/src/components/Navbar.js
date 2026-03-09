@@ -26,7 +26,7 @@ const Navbar = () => {
   const [notificationCount, setNotificationCount] = useState(0);
   const [chatCount, setChatCount] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout } = auth;
   const userId = user?.id || user?._id || user?.userId;
   const profileMenuRef = useRef(null);
 
@@ -106,11 +106,23 @@ const Navbar = () => {
       loadChatCount();
     };
 
-    loadCartCount();
-    loadNotificationCount();
-    loadChatCount();
-    const notificationInterval = setInterval(loadNotificationCount, 15000);
-    const chatInterval = setInterval(loadChatCount, 10000);
+    const loadAllBadges = () => {
+      loadCartCount();
+      loadNotificationCount();
+      loadChatCount();
+    };
+
+    loadAllBadges();
+
+    // Keep polling modest on production to reduce request bursts and UI jank.
+    const notificationInterval = setInterval(() => {
+      if (document.visibilityState === "visible") loadNotificationCount();
+    }, 45000);
+
+    const chatInterval = setInterval(() => {
+      if (document.visibilityState === "visible") loadChatCount();
+    }, 30000);
+
     window.addEventListener(CART_UPDATED_EVENT, handleCartUpdated);
     window.addEventListener(NOTIFICATION_READ_EVENT, handleNotificationRead);
     window.addEventListener(CHAT_UNREAD_UPDATED_EVENT, handleChatUnreadUpdated);
