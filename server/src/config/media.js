@@ -46,7 +46,13 @@ export const uploadProductImage = async (filePath) => {
       return String(result?.secure_url || result?.url || "");
     } catch (error) {
       await safeUnlink(filePath);
-      throw error;
+      const message = String(error?.message || "");
+
+      if (/invalid\s+api[_-]?key|invalid\s+signature|authentication/i.test(message)) {
+        throw new Error("Image upload service is misconfigured. Please contact support.");
+      }
+
+      throw new Error("Image upload failed. Please try again.");
     }
   }
 
