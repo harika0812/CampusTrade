@@ -45,6 +45,27 @@
   line-height: 1.5;
 }
 
+.sell-feedback {
+  margin: 4px 0 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  border: 1px solid transparent;
+}
+
+.sell-feedback.success {
+  border-color: rgba(52, 211, 153, 0.52);
+  background: rgba(6, 78, 59, 0.3);
+  color: #d1fae5;
+}
+
+.sell-feedback.error {
+  border-color: rgba(248, 113, 113, 0.52);
+  background: rgba(127, 29, 29, 0.24);
+  color: #fee2e2;
+}
+
 .field-label {
   font-size: 0.84rem;
   color: #e2e8f0;
