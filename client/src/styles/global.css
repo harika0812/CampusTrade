@@ -2103,22 +2103,60 @@ body::before {
 .cart-payment-modal {
   width: min(420px, calc(100vw - 28px));
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: linear-gradient(160deg, rgba(15, 23, 42, 0.98) 0%, rgba(17, 24, 39, 0.96) 100%);
-  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.46);
-  padding: 18px;
+  border: 1px solid rgba(125, 211, 252, 0.38);
+  background: radial-gradient(circle at 85% 10%, rgba(59, 130, 246, 0.22), transparent 42%),
+    linear-gradient(160deg, rgba(7, 15, 34, 0.99) 0%, rgba(12, 20, 40, 0.98) 100%);
+  box-shadow: 0 24px 52px rgba(2, 6, 23, 0.56);
+  padding: 20px;
 }
 
 .cart-payment-modal h3 {
-  margin: 0 0 6px;
-  color: #f8fafc;
-  font-size: 1.02rem;
+  margin: 0 0 8px;
+  color: #f9fafb;
+  font-size: 1.16rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .cart-payment-modal p {
   margin: 0 0 12px;
-  color: #dbe7fb;
-  font-size: 0.9rem;
+  color: #e6edf8;
+  font-size: 0.93rem;
+}
+
+.cart-payment-subtitle {
+  color: #c7d2fe !important;
+}
+
+.cart-payment-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.cart-payment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 9px 10px;
+}
+
+.cart-payment-row span {
+  color: #bfdbfe;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.cart-payment-row strong {
+  color: #f8fafc;
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-align: right;
+  word-break: break-word;
 }
 
 .cart-payment-modal-actions {
@@ -2135,9 +2173,97 @@ body::before {
 .cart-payment-hint {
   margin: 2px 0 0;
   width: 100%;
-  color: #dbe7fb;
+  color: #dbeafe;
   font-size: 0.84rem;
   line-height: 1.45;
+}
+
+.cart-celebration-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.cart-celebration-modal {
+  position: relative;
+  width: min(460px, calc(100vw - 24px));
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.28), transparent 40%),
+    radial-gradient(circle at 80% 0%, rgba(56, 189, 248, 0.22), transparent 42%),
+    linear-gradient(160deg, rgba(15, 23, 42, 0.98) 0%, rgba(17, 24, 39, 0.98) 100%);
+  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.5);
+  padding: 22px;
+  overflow: hidden;
+  animation: cartCelebratePop 0.32s ease-out;
+}
+
+.cart-celebration-modal h3 {
+  margin: 0 0 8px;
+  color: #ecfeff;
+  font-size: 1.18rem;
+}
+
+.cart-celebration-modal p {
+  margin: 0;
+  color: #dbeafe;
+  font-size: 0.94rem;
+}
+
+.cart-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cart-confetti-piece {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 16px;
+  border-radius: 3px;
+  opacity: 0.92;
+  animation: cartConfettiFall 1.55s linear infinite;
+}
+
+.cart-confetti-piece:nth-child(1) {
+  left: 10%;
+  background: #22c55e;
+  animation-delay: 0s;
+}
+
+.cart-confetti-piece:nth-child(2) {
+  left: 24%;
+  background: #f59e0b;
+  animation-delay: 0.18s;
+}
+
+.cart-confetti-piece:nth-child(3) {
+  left: 41%;
+  background: #60a5fa;
+  animation-delay: 0.34s;
+}
+
+.cart-confetti-piece:nth-child(4) {
+  left: 57%;
+  background: #fb7185;
+  animation-delay: 0.1s;
+}
+
+.cart-confetti-piece:nth-child(5) {
+  left: 73%;
+  background: #34d399;
+  animation-delay: 0.28s;
+}
+
+.cart-confetti-piece:nth-child(6) {
+  left: 87%;
+  background: #f472b6;
+  animation-delay: 0.42s;
 }
 
 @media (max-width: 560px) {
@@ -2860,6 +2986,31 @@ body::before {
   50% { transform: translateX(4px); }
   75% { transform: translateX(-2px); }
   100% { transform: translateX(0); }
+}
+
+@keyframes cartCelebratePop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cartConfettiFall {
+  0% {
+    transform: translateY(-8px) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(310px) rotate(300deg);
+    opacity: 0;
+  }
 }
 
 /* Phase 1 visual refresh: landing + notifications */

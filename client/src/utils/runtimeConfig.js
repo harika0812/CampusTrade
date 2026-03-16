@@ -2,6 +2,20 @@ const trimTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
 const envApiBase = trimTrailingSlash(process.env.REACT_APP_API_URL || "");
 
+const deriveApiBaseUrl = () => {
+  if (envApiBase) return envApiBase;
+
+  if (typeof window !== "undefined") {
+    const origin = trimTrailingSlash(window.location?.origin || "");
+    // CRA local dev runs on :3000 while API commonly runs on :5000.
+    if (/^https?:\/\/localhost:3000$/i.test(origin)) {
+      return "http://localhost:5000/api";
+    }
+  }
+
+  return "/api";
+};
+
 const deriveServerOrigin = () => {
   const explicitServer = trimTrailingSlash(process.env.REACT_APP_SERVER_URL || "");
   if (explicitServer) return explicitServer;
@@ -22,7 +36,7 @@ const deriveServerOrigin = () => {
   return "http://localhost:5000";
 };
 
-export const API_BASE_URL = envApiBase || "/api";
+export const API_BASE_URL = deriveApiBaseUrl();
 export const SERVER_ORIGIN = deriveServerOrigin();
 export const SOCKET_URL = trimTrailingSlash(process.env.REACT_APP_SOCKET_URL || SERVER_ORIGIN);
 
