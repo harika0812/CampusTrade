@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Graduation Cap -->
+  <g>
+    <polygon points="32,10 54,20 32,30 10,20" fill="#2d3e50"/>
+    <rect x="28" y="30" width="8" height="8" fill="#2d3e50"/>
+    <rect x="30.5" y="38" width="3" height="8" fill="#2d3e50"/>
+    <circle cx="32" cy="46.5" r="1.5" fill="#f4c542"/>
+  </g>
+  <!-- Shopping Cart -->
+  <g>
+    <rect x="18" y="44" width="28" height="8" rx="2" fill="#4caf50"/>
+    <rect x="22" y="36" width="20" height="10" rx="2" fill="#81c784"/>
+    <circle cx="24" cy="54" r="3" fill="#2d3e50"/>
+    <circle cx="40" cy="54" r="3" fill="#2d3e50"/>
+  </g>
+</svg>

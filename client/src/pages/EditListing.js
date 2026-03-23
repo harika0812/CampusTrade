@@ -263,6 +263,7 @@ const EditListing = () => {
             src={resolveImageUrl(existingImage)}
             alt={formData.title || "Current listing"}
             className="edit-existing-image"
+            loading="lazy"
           />
         ) : null}
 

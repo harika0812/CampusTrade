@@ -334,6 +334,7 @@ const SellerOrders = () => {
                           src={resolveImageUrl(item.imageUrl)}
                           alt={item.title || "Ordered product"}
                           className="sales-item-image"
+                          loading="lazy"
                         />
                       ) : (
                         <div

@@ -58,6 +58,7 @@
 //             cursor: zoomLevel > 1 ? "zoom-out" : "zoom-in"
 //           }}
 //           onWheel={handleWheel}
+//           loading="lazy"
 //         />
 //       </div>
 
@@ -204,6 +205,7 @@ export default function ProductDetails() {
             className="pd-image"
             ref={imageRef}
             onWheel={handleWheel}
+            loading="lazy"
           />
         </div>
 
@@ -228,7 +230,7 @@ export default function ProductDetails() {
 
           {listingType === "lend" ? (
             <div className="pd-lending-note">
-              <p>This item is available only for lending.</p>
+              <p>This item is available only for lending. Use Contact Seller to discuss duration, return date, and terms.</p>
             </div>
           ) : null}
 
@@ -240,7 +242,8 @@ export default function ProductDetails() {
 
           {listingType === "both" ? (
             <div className="pd-lending-note">
-              <p>This item is available for both lending and purchase.</p>
+              <p>This item is available for both purchase and lending.</p>
+              <p>Use Add to Cart for purchase. Use Contact Seller for lending details and coordination.</p>
             </div>
           ) : null}
 
