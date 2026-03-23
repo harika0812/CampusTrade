@@ -22,6 +22,7 @@
 // export default app;
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import productRoutes from "./routes/product.routes.js";
@@ -35,11 +36,49 @@ const app = express();
 
 // Render/hosting platforms sit behind reverse proxies. Trust the first proxy
 // so req.ip is the real client IP for rate limiting.
+
 app.set("trust proxy", 1);
 
+// Security: Set secure HTTP headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
+        imgSrc: ["'self'", 'data:', 'blob:', process.env.CLIENT_URL || "http://localhost:3000", "https://res.cloudinary.com"],
+        fontSrc: ["'self'", "fonts.gstatic.com", 'data:'],
+        connectSrc: ["'self'", process.env.CLIENT_URL || "http://localhost:3000", "wss://*", "https://api.razorpay.com"],
+        frameSrc: ["'self'", "https://checkout.razorpay.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // For compatibility with some 3rd party scripts
+  })
+);
+
 // CORS configuration - restrict to frontend only
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://campus-trade-mu.vercel.app"
+];
+if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
+  allowedOrigins.push(process.env.CLIENT_URL);
+}
 const corsOptions = {
-  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS: ' + origin));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],

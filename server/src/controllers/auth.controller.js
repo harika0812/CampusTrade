@@ -1,9 +1,69 @@
+// Logout endpoint
+export const logoutUser = async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken;
+    if (token) {
+      let payload;
+      try {
+        payload = jwt.verify(token, process.env.JWT_SECRET);
+      } catch {
+        // Ignore invalid token
+      }
+      if (payload) {
+        const user = await User.findById(payload.userId);
+        if (user) {
+          user.refreshToken = null;
+          await user.save();
+        }
+      }
+    }
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict"
+    });
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("LOGOUT ERROR:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+// Refresh token endpoint
+export const refreshToken = async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken;
+    if (!token) {
+      return res.status(401).json({ message: "No refresh token provided" });
+    }
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+    const user = await User.findById(payload.userId);
+    if (!user || user.refreshToken !== token) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+    // Optionally rotate refresh token here for extra security
+    const newAccessToken = generateToken(user._id, "15m");
+    res.status(200).json({ token: newAccessToken });
+  } catch (error) {
+    console.error("REFRESH TOKEN ERROR:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import crypto from 'crypto';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/email.service.js';
 
-const generateToken = (userId) => {
+
+const generateToken = (userId, expiresIn = "15m") => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn });
+};
+
+const generateRefreshToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
@@ -86,19 +146,33 @@ export const loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-  return res.status(401).json({ message: "Invalid credentials" });
-}
-   if (!user.isVerified) return res.status(403).json({ message: 'Please verify your email first' });
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+    if (!user.isVerified) return res.status(403).json({ message: 'Please verify your email first' });
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const token = generateToken(user._id);
+    // Generate tokens
+    const accessToken = generateToken(user._id, "15m");
+    const refreshToken = generateRefreshToken(user._id);
+
+    // Store refresh token in DB
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    // Send refresh token as HTTP-only, Secure cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
 
     res.status(200).json({
       message: "Login successful",
-      token,
+      token: accessToken,
       user: buildUserPayload(user)
     });
   } catch (error) {

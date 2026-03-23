@@ -226,6 +226,7 @@ const MyListings = () => {
                   border: "1px solid rgba(125, 211, 252, 0.26)",
                   background: "rgba(12, 25, 62, 0.76)",
                 }}
+                loading="lazy"
               />
             ) : (
               <div

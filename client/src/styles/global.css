@@ -1,3 +1,10 @@
+/* Ensure all buttons and links have minimum touch target size for accessibility */
+button, .btn, a, [role="button"] {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
 /* Global polish */
 * {
   box-sizing: border-box;

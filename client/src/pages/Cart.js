@@ -164,6 +164,7 @@ const Cart = () => {
                   src={item.image ? resolveServerAssetUrl(item.image) : "https://via.placeholder.com/120?text=Item"}
                   alt={item.title}
                   className="cart-image"
+                  loading="lazy"
                 />
                 <div className="cart-content">
                   <h3>{item.title}</h3>

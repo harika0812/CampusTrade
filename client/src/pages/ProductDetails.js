@@ -58,6 +58,7 @@
 //             cursor: zoomLevel > 1 ? "zoom-out" : "zoom-in"
 //           }}
 //           onWheel={handleWheel}
+//           loading="lazy"
 //         />
 //       </div>
 
@@ -204,6 +205,7 @@ export default function ProductDetails() {
             className="pd-image"
             ref={imageRef}
             onWheel={handleWheel}
+            loading="lazy"
           />
         </div>
 
