@@ -17,11 +17,7 @@ export const logoutUser = async (req, res) => {
         }
       }
     }
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict"
-    });
+    res.clearCookie("refreshToken", refreshTokenCookieOptions);
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     console.error("LOGOUT ERROR:", error);
@@ -65,6 +61,13 @@ const generateToken = (userId, expiresIn = "15m") => {
 
 const generateRefreshToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+};
+
+const refreshTokenCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
 };
 
 const buildUserPayload = (user) => ({
@@ -164,9 +167,7 @@ export const loginUser = async (req, res) => {
 
     // Send refresh token as HTTP-only, Secure cookie
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      ...refreshTokenCookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
