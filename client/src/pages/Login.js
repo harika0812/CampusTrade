@@ -243,7 +243,12 @@ const Login = () => {
 
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      const apiMessage = error?.response?.data?.message || "Login failed";
+      const apiMessage =
+        error?.response?.data?.details ||
+        error?.response?.data?.message ||
+        (error?.response
+          ? "Login failed"
+          : "Unable to reach the server. Make sure the backend is running and the API URL is correct.");
       setErrorMessage(apiMessage.replace(/https?:\/\/localhost:\d+/gi, "this app"));
     } finally {
       setIsSubmitting(false);

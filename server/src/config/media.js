@@ -36,25 +36,25 @@ export const uploadProductImage = async (filePath) => {
     throw new Error("Image file path is required");
   }
 
-  if (isCloudinaryConfigured) {
-    try {
-      const result = await cloudinary.uploader.upload(filePath, {
-        folder: "campustrade/products",
-        resource_type: "image",
-      });
-      await safeUnlink(filePath);
-      return String(result?.secure_url || result?.url || "");
-    } catch (error) {
-      await safeUnlink(filePath);
-      const message = String(error?.message || "");
-
-      if (/invalid\s+api[_-]?key|invalid\s+signature|authentication/i.test(message)) {
-        throw new Error("Image upload service is misconfigured. Please contact support.");
-      }
-
-      throw new Error("Image upload failed. Please try again.");
-    }
+  if (!isCloudinaryConfigured) {
+    throw new Error("Image upload service is not configured.");
   }
 
-  return String(filePath).replace(/\\/g, "/");
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: "campustrade/products",
+      resource_type: "image",
+    });
+    await safeUnlink(filePath);
+    return String(result?.secure_url || result?.url || "");
+  } catch (error) {
+    await safeUnlink(filePath);
+    const message = String(error?.message || "");
+
+    if (/invalid\s+api[_-]?key|invalid\s+signature|authentication/i.test(message)) {
+      throw new Error("Image upload service is misconfigured. Please contact support.");
+    }
+
+    throw new Error("Image upload failed. Please try again.");
+  }
 };
