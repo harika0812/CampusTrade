@@ -1,9 +1,12 @@
 const trimTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
 const envApiBase = trimTrailingSlash(process.env.REACT_APP_API_URL || "");
+const explicitServerUrl = trimTrailingSlash(process.env.REACT_APP_SERVER_URL || "");
 
 const deriveApiBaseUrl = () => {
   if (envApiBase) return envApiBase;
+
+  if (explicitServerUrl) return `${explicitServerUrl}/api`;
 
   if (typeof window !== "undefined") {
     const origin = trimTrailingSlash(window.location?.origin || "");
@@ -17,8 +20,7 @@ const deriveApiBaseUrl = () => {
 };
 
 const deriveServerOrigin = () => {
-  const explicitServer = trimTrailingSlash(process.env.REACT_APP_SERVER_URL || "");
-  if (explicitServer) return explicitServer;
+  if (explicitServerUrl) return explicitServerUrl;
 
   if (envApiBase && /^https?:\/\//i.test(envApiBase)) {
     try {
@@ -30,7 +32,11 @@ const deriveServerOrigin = () => {
   }
 
   if (typeof window !== "undefined" && window.location?.origin) {
-    return trimTrailingSlash(window.location.origin);
+    const origin = trimTrailingSlash(window.location.origin);
+    if (/^https?:\/\/localhost:3000$/i.test(origin)) {
+      return "http://localhost:5000";
+    }
+    return origin;
   }
 
   return "http://localhost:5000";

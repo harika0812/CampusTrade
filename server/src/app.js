@@ -23,6 +23,9 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import productRoutes from "./routes/product.routes.js";
@@ -33,6 +36,9 @@ import { generalLimiter } from "./middlewares/rateLimit.middleware.js";
 import { securityMiddleware } from "./middlewares/validate.js";
 
 const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientBuildPath = path.resolve(__dirname, "../../client/build");
 
 // Render/hosting platforms sit behind reverse proxies. Trust the first proxy
 // so req.ip is the real client IP for rate limiting.
@@ -88,6 +94,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(cookieParser());
 
 // Security middleware - sanitize inputs
 app.use(securityMiddleware);
@@ -105,8 +112,17 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/payment", paymentRoutes);
 
 // Health check
-app.get("/", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({ message: "CampusTrade API is running 🚀" });
 });
+
+// Serve the React production build from the same server in production.
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(clientBuildPath));
+
+  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
+    res.sendFile(path.join(clientBuildPath, "index.html"));
+  });
+}
 
 export default app;

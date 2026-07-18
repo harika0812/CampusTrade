@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-
 export const protect = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -13,13 +12,15 @@ export const protect = (req, res, next) => {
 
     const decoded = jwt.verify(token, env.jwtSecret);
 
-    // ✅ THIS IS CRITICAL
     req.user = {
       userId: decoded.userId
     };
 
     next();
   } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Session expired" });
+    }
     console.error("AUTH ERROR:", error.message);
     return res.status(401).json({ message: "Invalid token" });
   }

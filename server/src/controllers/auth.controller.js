@@ -17,11 +17,7 @@ export const logoutUser = async (req, res) => {
         }
       }
     }
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict"
-    });
+    res.clearCookie("refreshToken", refreshTokenCookieOptions);
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     console.error("LOGOUT ERROR:", error);
@@ -46,7 +42,7 @@ export const refreshToken = async (req, res) => {
       return res.status(401).json({ message: "Invalid refresh token" });
     }
     // Optionally rotate refresh token here for extra security
-    const newAccessToken = generateToken(user._id, "15m");
+    const newAccessToken = generateToken(user._id, "1h");
     res.status(200).json({ token: newAccessToken });
   } catch (error) {
     console.error("REFRESH TOKEN ERROR:", error);
@@ -59,12 +55,21 @@ import crypto from 'crypto';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/email.service.js';
 
 
-const generateToken = (userId, expiresIn = "15m") => {
+const generateToken = (userId, expiresIn = "1h") => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn });
 };
 
+const REFRESH_TOKEN_LIFETIME_MS = 5 * 24 * 60 * 60 * 1000;
+
 const generateRefreshToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "5d" });
+};
+
+const refreshTokenCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
 };
 
 const buildUserPayload = (user) => ({
@@ -155,7 +160,7 @@ export const loginUser = async (req, res) => {
     }
 
     // Generate tokens
-    const accessToken = generateToken(user._id, "15m");
+    const accessToken = generateToken(user._id, "1h");
     const refreshToken = generateRefreshToken(user._id);
 
     // Store refresh token in DB
@@ -164,10 +169,8 @@ export const loginUser = async (req, res) => {
 
     // Send refresh token as HTTP-only, Secure cookie
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      ...refreshTokenCookieOptions,
+      maxAge: REFRESH_TOKEN_LIFETIME_MS
     });
 
     res.status(200).json({

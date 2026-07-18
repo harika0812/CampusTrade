@@ -4,6 +4,7 @@ import { refreshToken as refreshTokenApi } from "./auth.api";
 
 const API = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
 });
 
 // Automatically attach token
@@ -25,6 +26,18 @@ export function setSessionExpiredHandler(fn) {
 let isRefreshing = false;
 let refreshSubscribers = [];
 
+const publicAuthPaths = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/verify",
+];
+
+function isPublicAuthRequest(url = "") {
+  return publicAuthPaths.some((path) => String(url).includes(path));
+}
+
 function subscribeTokenRefresh(cb) {
   refreshSubscribers.push(cb);
 }
@@ -36,7 +49,20 @@ function onRefreshed(token) {
 API.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config || {};
+    const isRefreshRequest = String(originalRequest.url || "").includes("/auth/refresh");
+    const isPublicAuthRequestCall = isPublicAuthRequest(originalRequest.url || "");
+
+    // Never attempt to refresh the refresh call itself.
+    if (isRefreshRequest) {
+      return Promise.reject(error);
+    }
+
+    // Public auth calls should surface their own backend errors directly.
+    if (isPublicAuthRequestCall) {
+      return Promise.reject(error);
+    }
+
     if (
       error.response &&
       error.response.status === 401 &&

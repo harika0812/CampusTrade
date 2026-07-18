@@ -118,9 +118,18 @@ import {
 import { getSellerOrders } from "../api/payment.api";
 import { resolveServerAssetUrl } from "../utils/runtimeConfig";
 
+const FALLBACK_PRODUCT_IMAGE =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='800' viewBox='0 0 600 800'%3E%3Crect width='600' height='800' fill='%230d1b3d'/%3E%3Ctext x='50%25' y='50%25' fill='%239fb3d9' font-family='Arial' font-size='32' text-anchor='middle' dominant-baseline='middle'%3ECampusTrade%3C/text%3E%3C/svg%3E";
+
 const resolveImageUrl = (imagePath) => {
   if (!imagePath) return "";
   return resolveServerAssetUrl(imagePath);
+};
+
+const handleImageFallback = (event) => {
+  if (event.currentTarget.dataset.fallbackApplied === "true") return;
+  event.currentTarget.dataset.fallbackApplied = "true";
+  event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
 };
 
 const MyListings = () => {
@@ -217,6 +226,7 @@ const MyListings = () => {
               <img
                 src={resolveImageUrl(p.images[0])}
                 alt={p.title}
+                onError={handleImageFallback}
                 style={{
                   width: "100%",
                   height: "160px",

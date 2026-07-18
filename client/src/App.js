@@ -24,6 +24,7 @@ import GlobalToast from "./components/Modal/GlobalToast";
 import { setSessionExpiredHandler } from "./api/axios";
 import SessionExpiredModal from "./components/Modal/SessionExpiredModal";
 import { useAuth } from "./app/authContext";
+import { refreshToken as refreshTokenApi } from "./api/auth.api";
 
 function useScrollAndTitle() {
   const location = useLocation();
@@ -67,6 +68,39 @@ function App() {
       logout();
       setSessionExpired(true);
     });
+  }, [logout]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrapSession = async () => {
+      const hasStoredUser = Boolean(localStorage.getItem("user"));
+      const hasStoredToken = Boolean(localStorage.getItem("token"));
+
+      if (!hasStoredUser || !hasStoredToken) return;
+
+      setGlobalLoading(true);
+      try {
+        const data = await refreshTokenApi();
+        if (!cancelled && data?.token) {
+          localStorage.setItem("token", data.token);
+        }
+      } catch {
+        if (!cancelled) {
+          logout();
+        }
+      } finally {
+        if (!cancelled) {
+          setGlobalLoading(false);
+        }
+      }
+    };
+
+    bootstrapSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, [logout]);
 
   const handleLogin = () => {

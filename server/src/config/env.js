@@ -32,7 +32,7 @@ if (nodeEnv === "production") {
   const missingCloudinaryVars = requiredCloudinaryVars.filter((varName) => !process.env[varName]);
   if (missingCloudinaryVars.length > 0) {
     console.error("❌ Missing production media variables:", missingCloudinaryVars.join(", "));
-    console.error("📋 Set Cloudinary variables for scalable media storage in production");
+    console.error("📋 Set Cloudinary variables for production image storage");
     process.exit(1);
   }
 }
