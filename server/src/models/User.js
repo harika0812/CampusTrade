@@ -93,9 +93,15 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    refreshToken: {
+    refreshTokenHash: {
       type: String,
-      default: null
+      default: null,
+      select: false
+    },
+    refreshTokenJti: {
+      type: String,
+      default: null,
+      select: false
     }
   },
   { timestamps: true }
@@ -104,7 +110,12 @@ const userSchema = new mongoose.Schema(
 // Hash password before saving
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
-  this.password = await bcrypt.hash(this.password, 10);
+
+  try {
+    this.password = await bcrypt.hash(this.password, 10);
+  } catch (error) {
+    throw error;
+  }
 });
 
 // Cascade delete products and messages when user is deleted

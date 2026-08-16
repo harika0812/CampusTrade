@@ -1,14 +1,14 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useAuth } from "../app/authContext";
+import { ChatContext } from "../features/chat/ChatContext";
+import { logoutUser } from "../api/auth.api";
 import { CART_UPDATED_EVENT, getCart } from "../api/cart.api";
 import { getOrderNotifications } from "../api/payment.api";
-import { getConversations } from "../api/chat.api";
 import { ShoppingBag, Plus, Package, MessageCircle, ShoppingCart, LogOut, Settings, Bell } from "lucide-react";
 import "./Navbar.css";
 
 const NOTIFICATION_READ_EVENT = "notification-read-updated";
-const CHAT_UNREAD_UPDATED_EVENT = "chat-unread-updated";
 
 const getNotificationReadKey = (userId) => `campustrade_notifications_last_read_${userId}`;
 
@@ -22,13 +22,16 @@ const Navbar = () => {
   const auth = useAuth();
   const user = auth?.user;
   const navigate = useNavigate();
+  const chatContext = useContext(ChatContext);
   const [cartCount, setCartCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
-  const [chatCount, setChatCount] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
   const { logout } = auth;
   const userId = user?.id || user?._id || user?.userId;
   const profileMenuRef = useRef(null);
+
+  // Get chat count from ChatContext (replaces polling)
+  const chatCount = chatContext?.unreadTotalCount || 0;
 
   useEffect(() => {
     let isMounted = true;
@@ -71,24 +74,6 @@ const Navbar = () => {
       }
     };
 
-    const loadChatCount = async () => {
-      if (!userId) {
-        if (isMounted) setChatCount(0);
-        return;
-      }
-
-      try {
-        const conversations = await getConversations(userId);
-        const unreadCount = (conversations || []).reduce(
-          (sum, conversation) => sum + Number(conversation?.unreadCount || 0),
-          0
-        );
-        if (isMounted) setChatCount(unreadCount);
-      } catch {
-        if (isMounted) setChatCount(0);
-      }
-    };
-
     const handleCartUpdated = (event) => {
       const nextCount = event?.detail?.totalItems;
       if (typeof nextCount === "number") {
@@ -102,14 +87,9 @@ const Navbar = () => {
       loadNotificationCount();
     };
 
-    const handleChatUnreadUpdated = () => {
-      loadChatCount();
-    };
-
     const loadAllBadges = () => {
       loadCartCount();
       loadNotificationCount();
-      loadChatCount();
     };
 
     loadAllBadges();
@@ -119,21 +99,14 @@ const Navbar = () => {
       if (document.visibilityState === "visible") loadNotificationCount();
     }, 45000);
 
-    const chatInterval = setInterval(() => {
-      if (document.visibilityState === "visible") loadChatCount();
-    }, 30000);
-
     window.addEventListener(CART_UPDATED_EVENT, handleCartUpdated);
     window.addEventListener(NOTIFICATION_READ_EVENT, handleNotificationRead);
-    window.addEventListener(CHAT_UNREAD_UPDATED_EVENT, handleChatUnreadUpdated);
 
     return () => {
       isMounted = false;
       clearInterval(notificationInterval);
-      clearInterval(chatInterval);
       window.removeEventListener(CART_UPDATED_EVENT, handleCartUpdated);
       window.removeEventListener(NOTIFICATION_READ_EVENT, handleNotificationRead);
-      window.removeEventListener(CHAT_UNREAD_UPDATED_EVENT, handleChatUnreadUpdated);
     };
   }, [userId]);
 
@@ -269,10 +242,16 @@ const Navbar = () => {
 
                   <button
                     className="logout"
-                    onClick={() => {
+                    onClick={async () => {
                       setProfileOpen(false);
-                      logout();
-                      navigate("/login");
+                      try {
+                        await logoutUser();
+                      } catch {
+                        // Ignore server-side logout failures so the client still clears local session state.
+                      } finally {
+                        logout();
+                        navigate("/login");
+                      }
                     }}
                   >
                     <LogOut size={16} /> Logout

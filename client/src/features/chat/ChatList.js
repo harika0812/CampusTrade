@@ -1,14 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+import React, { useContext, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { deleteConversation, getConversations } from "../../api/chat.api";
-import { SOCKET_URL } from "../../utils/runtimeConfig";
+import { deleteConversation } from "../../api/chat.api";
+import { ChatContext } from "./ChatContext";
 
 const CHAT_UNREAD_UPDATED_EVENT = "chat-unread-updated";
-
-const socket = io(SOCKET_URL, {
-  autoConnect: false
-});
 
 const formatChatName = (user) => {
   const rawName = String(user?.name || "User").trim();
@@ -18,57 +13,14 @@ const formatChatName = (user) => {
 };
 
 const ChatList = ({ userId, onSelect }) => {
-  const [convos, setConvos] = useState([]);
-  const [lastError, setLastError] = useState("");
+  const chatContext = useContext(ChatContext);
   const [deletingUserId, setDeletingUserId] = useState("");
   const [contextMenuUserId, setContextMenuUserId] = useState("");
 
   useEffect(() => {
-    if (!userId) return;
-    let isLoading = false;
-    let isUnmounted = false;
-    let blockedUntil = 0;
-
-    const load = async () => {
-      if (isLoading || Date.now() < blockedUntil || isUnmounted) return;
-      isLoading = true;
-      try {
-        const data = await getConversations(userId);
-        if (!isUnmounted) {
-          setConvos(data);
-          setLastError("");
-        }
-      } catch (error) {
-        const isRateLimited = error?.response?.status === 429;
-        if (isRateLimited) {
-          blockedUntil = Date.now() + 30_000;
-          if (!isUnmounted) {
-            setLastError("Too many requests. Retrying in 30 seconds...");
-          }
-        } else if (!isUnmounted) {
-          setLastError("Failed to load conversations.");
-        }
-      } finally {
-        isLoading = false;
-      }
-    };
-
-    load();
-    if (!socket.connected) socket.connect();
-    const onNewMessage = () => load();
-    const onMessagesReadUpdate = () => load();
-    
-    socket.on("newMessage", onNewMessage);
-    socket.on("messagesReadUpdate", onMessagesReadUpdate);
-
-    const t = setInterval(load, 20000);
-    return () => {
-      isUnmounted = true;
-      clearInterval(t);
-      socket.off("newMessage", onNewMessage);
-      socket.off("messagesReadUpdate", onMessagesReadUpdate);
-    };
-  }, [userId]);
+    if (!chatContext) return;
+    chatContext.setActiveConversationId(null);
+  }, [chatContext]);
 
   useEffect(() => {
     const closeMenu = () => setContextMenuUserId("");
@@ -94,9 +46,9 @@ const ChatList = ({ userId, onSelect }) => {
     try {
       setDeletingUserId(otherUserId);
       await deleteConversation({ userId, otherUserId });
-      setConvos((prev) => prev.filter((conversation) => conversation._id !== otherUserId));
+      chatContext.removeConversation(otherUserId);
     } catch {
-      setLastError("Failed to delete conversation.");
+      alert("Failed to delete conversation.");
     } finally {
       setDeletingUserId("");
       setContextMenuUserId("");
@@ -109,16 +61,13 @@ const ChatList = ({ userId, onSelect }) => {
   };
 
   const handleSelectConversation = (otherUserId, otherUserName) => {
-    setConvos((prev) =>
-      prev.map((conversation) =>
-        conversation._id === otherUserId
-          ? { ...conversation, unreadCount: 0 }
-          : conversation
-      )
-    );
+    chatContext.markConversationAsRead(otherUserId);
     window.dispatchEvent(new Event(CHAT_UNREAD_UPDATED_EVENT));
     onSelect({ otherUserId, name: otherUserName });
   };
+
+  const convos = chatContext?.conversations || [];
+  const lastError = chatContext?.lastError || "";
 
   return (
     <div className="chat-list">
@@ -137,6 +86,7 @@ const ChatList = ({ userId, onSelect }) => {
               className="chat-list-item"
               onContextMenu={(event) => openContextMenu(event, otherUserId)}
               onClick={() => handleSelectConversation(otherUserId, otherUserName)}
+              disabled={deletingUserId === otherUserId}
             >
               <div className="chat-title">
                 {otherUserName}

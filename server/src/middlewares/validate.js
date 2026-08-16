@@ -133,8 +133,9 @@ export const validateProduct = [
 // CHAT VALIDATION RULES
 export const validateMessage = [
   body('senderId')
+    .optional()
     .trim()
-    .notEmpty().withMessage('Sender ID is required')
+    .notEmpty().withMessage('Sender ID is required when provided')
     .isMongoId().withMessage('Invalid sender ID'),
   
   body('receiverId')
@@ -146,6 +147,11 @@ export const validateMessage = [
     .trim()
     .notEmpty().withMessage('Message cannot be empty')
     .isLength({ min: 1, max: 10000 }).withMessage('Message must be 1-10000 characters'),
+
+  body('clientMessageId')
+    .trim()
+    .notEmpty().withMessage('clientMessageId is required')
+    .isLength({ min: 6, max: 120 }).withMessage('clientMessageId must be 6-120 characters'),
   
   handleValidationErrors
 ];

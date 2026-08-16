@@ -491,7 +491,29 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: "Update profile before listing item." });
     }
 
-    const imageUrl = await uploadProductImage(req.file.path);
+    let imageUrl;
+    try {
+      imageUrl = await uploadProductImage(req.file.path);
+    } catch (uploadError) {
+      const uploadMessage = String(uploadError?.message || "");
+      console.error("📸 IMAGE UPLOAD FAILED:", uploadMessage);
+      
+      // Distinguish between config and upload failures
+      if (uploadMessage.includes("not configured")) {
+        return res.status(503).json({ message: "Image upload service is not available. Please try again later." });
+      }
+      if (uploadMessage.includes("authentication")) {
+        return res.status(503).json({ message: "Image upload service authentication failed. Please try again later." });
+      }
+      
+      return res.status(400).json({ message: uploadMessage || "Image upload failed. Please check the file and try again." });
+    }
+
+    if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+      console.error("❌ INVALID IMAGE URL RETURNED:", imageUrl);
+      return res.status(500).json({ message: "Image upload validation failed. Please try again." });
+    }
+
     const parsedCopies = Number.parseInt(availableCopies, 10);
     const safeAvailableCopies = Number.isInteger(parsedCopies) && parsedCopies >= 0 ? parsedCopies : 1;
     const safeListingType = ["sell", "lend", "both"].includes(listingType) ? listingType : "sell";
@@ -531,7 +553,7 @@ export const createProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("CREATE PRODUCT ERROR:", error);
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: "Failed to create product. Please try again." });
   }
 };
 
@@ -739,7 +761,28 @@ export const updateProduct = async (req, res) => {
     }
 
     if (req.file?.path) {
-      const imageUrl = await uploadProductImage(req.file.path);
+      let imageUrl;
+      try {
+        imageUrl = await uploadProductImage(req.file.path);
+      } catch (uploadError) {
+        const uploadMessage = String(uploadError?.message || "");
+        console.error("📸 IMAGE UPLOAD FAILED (UPDATE):", uploadMessage);
+        
+        if (uploadMessage.includes("not configured")) {
+          return res.status(503).json({ message: "Image upload service is not available. Please try again later." });
+        }
+        if (uploadMessage.includes("authentication")) {
+          return res.status(503).json({ message: "Image upload service authentication failed. Please try again later." });
+        }
+        
+        return res.status(400).json({ message: uploadMessage || "Image upload failed. Please check the file and try again." });
+      }
+
+      if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+        console.error("❌ INVALID IMAGE URL RETURNED (UPDATE):", imageUrl);
+        return res.status(500).json({ message: "Image upload validation failed. Please try again." });
+      }
+      
       product.images = [imageUrl];
     }
 

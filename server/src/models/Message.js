@@ -24,6 +24,12 @@ const messageSchema = new mongoose.Schema(
       required: true
     },
 
+    clientMessageId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     deliveredAt: {
       type: Date,
       default: null
@@ -54,5 +60,13 @@ messageSchema.virtual('status').get(function() {
 // Ensure virtuals are included in JSON
 messageSchema.set('toJSON', { virtuals: true });
 messageSchema.set('toObject', { virtuals: true });
+
+messageSchema.index(
+  { sender: 1, clientMessageId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { clientMessageId: { $type: "string" } },
+  }
+);
 
 export default mongoose.model("Message", messageSchema);

@@ -2,18 +2,24 @@ const trimTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
 const envApiBase = trimTrailingSlash(process.env.REACT_APP_API_URL || "");
 const explicitServerUrl = trimTrailingSlash(process.env.REACT_APP_SERVER_URL || "");
+const explicitSocketUrl = trimTrailingSlash(process.env.REACT_APP_SOCKET_URL || "");
+
+const getWindowOrigin = () => {
+  if (typeof window === "undefined") return "";
+  return trimTrailingSlash(window.location?.origin || "");
+};
+
+const isLocalDevOrigin = (origin = "") =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin);
 
 const deriveApiBaseUrl = () => {
   if (envApiBase) return envApiBase;
 
   if (explicitServerUrl) return `${explicitServerUrl}/api`;
 
-  if (typeof window !== "undefined") {
-    const origin = trimTrailingSlash(window.location?.origin || "");
-    // CRA local dev runs on :3000 while API commonly runs on :5000.
-    if (/^https?:\/\/localhost:3000$/i.test(origin)) {
-      return "http://localhost:5000/api";
-    }
+  const origin = getWindowOrigin();
+  if (isLocalDevOrigin(origin)) {
+    return "http://localhost:5000/api";
   }
 
   return "/api";
@@ -31,11 +37,12 @@ const deriveServerOrigin = () => {
     }
   }
 
-  if (typeof window !== "undefined" && window.location?.origin) {
-    const origin = trimTrailingSlash(window.location.origin);
-    if (/^https?:\/\/localhost:3000$/i.test(origin)) {
-      return "http://localhost:5000";
-    }
+  const origin = getWindowOrigin();
+  if (isLocalDevOrigin(origin)) {
+    return "http://localhost:5000";
+  }
+
+  if (origin) {
     return origin;
   }
 
@@ -44,7 +51,7 @@ const deriveServerOrigin = () => {
 
 export const API_BASE_URL = deriveApiBaseUrl();
 export const SERVER_ORIGIN = deriveServerOrigin();
-export const SOCKET_URL = trimTrailingSlash(process.env.REACT_APP_SOCKET_URL || SERVER_ORIGIN);
+export const SOCKET_URL = explicitSocketUrl || SERVER_ORIGIN;
 
 export const resolveServerAssetUrl = (assetPath) => {
   if (!assetPath) return "";

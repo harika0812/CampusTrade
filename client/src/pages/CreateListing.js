@@ -281,19 +281,40 @@ import "../styles/CreateListing.css";
 import { useNavigate } from "react-router-dom"; // Add this import
 import { getMyProfile } from "../api/user.api";
 
+const DRAFT_STORAGE_KEY = "campustrade_create_listing_draft";
+const EMPTY_FORM_DATA = {
+  title: "",
+  description: "",
+  price: "",
+  availableCopies: 1,
+  listingType: "sell",
+  borrowFee: "",
+  maxDurationDays: 7,
+  lendingTerms: "",
+  category: "Others",
+};
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+const validateSelectedImage = (file) => {
+  if (!file) {
+    return { ok: false, message: "Please choose a product image." };
+  }
+
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    return { ok: false, message: "Only JPG, PNG, and WEBP images are allowed." };
+  }
+
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    return { ok: false, message: "Image must be smaller than 5MB." };
+  }
+
+  return { ok: true, message: "" };
+};
+
 const CreateListing = () => {
   const navigate = useNavigate(); // Add this
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    price: "",
-    availableCopies: 1,
-    listingType: "sell",
-    borrowFee: "",
-    maxDurationDays: 7,
-    lendingTerms: "",
-    category: "Others",
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM_DATA);
 
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -301,6 +322,9 @@ const CreateListing = () => {
   const [hasRequiredProfileDetails, setHasRequiredProfileDetails] = useState(false);
   const [isProfileCheckLoading, setIsProfileCheckLoading] = useState(true);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [draftImageName, setDraftImageName] = useState("");
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -325,17 +349,119 @@ const CreateListing = () => {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!savedDraft) return;
+
+      const parsedDraft = JSON.parse(savedDraft);
+      if (!parsedDraft?.formData) return;
+
+      setFormData((previous) => ({ ...previous, ...parsedDraft.formData }));
+      if (parsedDraft.imageName) {
+        setDraftImageName(parsedDraft.imageName);
+      }
+
+      setFeedback({
+        type: "success",
+        message: "Draft restored. Your unfinished listing has been recovered.",
+      });
+    } catch {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleConnectionStatus = () => {
+      setIsOffline(!navigator.onLine);
+      if (navigator.onLine) {
+        setFeedback({ type: "success", message: "Connection restored. Your draft is still saved." });
+      }
+    };
+
+    window.addEventListener("online", handleConnectionStatus);
+    window.addEventListener("offline", handleConnectionStatus);
+
+    return () => {
+      window.removeEventListener("online", handleConnectionStatus);
+      window.removeEventListener("offline", handleConnectionStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
+
+  useEffect(() => {
+    const hasAnyDraftContent = Object.values(formData).some((value) => {
+      if (typeof value === "string") return value.trim().length > 0;
+      if (typeof value === "number") return value !== 0 && value !== 1;
+      return Boolean(value);
+    });
+
+    if (!hasAnyDraftContent && !draftImageName && !image) {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        formData,
+        imageName: image?.name || draftImageName || "",
+        savedAt: Date.now(),
+      })
+    );
+  }, [formData, image, draftImageName]);
+
   // Handle text inputs
   const handleChange = (e) => {
     const { name, value } = e.target;
     const nextValue = name === "category" ? value.replace(/\s+/g, "") : value;
-    setFormData({ ...formData, [name]: nextValue });
+    setFormData((previous) => ({ ...previous, [name]: nextValue }));
     if (feedback.message) setFeedback({ type: "", message: "" });
   };
 
   // Handle image input
   const handleImageChange = (e) => {
-    setImage(e.target.files[0]);
+    const nextImage = e.target.files?.[0] || null;
+    const validation = validateSelectedImage(nextImage);
+
+    if (!nextImage) {
+      setImage(null);
+      setDraftImageName("");
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+      setImagePreviewUrl("");
+      return;
+    }
+
+    if (!validation.ok) {
+      setImage(null);
+      setDraftImageName("");
+      setFeedback({ type: "error", message: validation.message });
+      e.target.value = "";
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+      setImagePreviewUrl("");
+      return;
+    }
+
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(nextImage);
+    setImage(nextImage);
+    setDraftImageName(nextImage.name);
+    setImagePreviewUrl(nextPreviewUrl);
+    if (feedback.message) setFeedback({ type: "", message: "" });
   };
 
   // Submit product
@@ -344,6 +470,12 @@ const CreateListing = () => {
 
     if (!image) {
       setFeedback({ type: "error", message: "Please upload a product image." });
+      return;
+    }
+
+    const validation = validateSelectedImage(image);
+    if (!validation.ok) {
+      setFeedback({ type: "error", message: validation.message });
       return;
     }
 
@@ -388,23 +520,19 @@ const CreateListing = () => {
       setTimeout(() => setShowPostedCelebration(false), 2500);
       setFeedback({ type: "success", message: "Listing created successfully." });
 
-      setFormData({
-        title: "",
-        description: "",
-        price: "",
-        availableCopies: 1,
-        listingType: "sell",
-        borrowFee: "",
-        maxDurationDays: 7,
-        lendingTerms: "",
-        category: "Others",
-      });
+      setFormData(EMPTY_FORM_DATA);
       setImage(null);
+      setDraftImageName("");
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
       navigate("/my-listings"); // Add this to navigate to my listings
     } catch (error) {
+      console.error("PRODUCT CREATE ERROR:", error);
+      console.error("Response data:", error?.response?.data);
+      console.error("Response status:", error?.response?.status);
       const details = error?.response?.data?.details;
       const message = error?.response?.data?.message;
-      setFeedback({ type: "error", message: details || message || "Something went wrong" });
+      const errorMsg = details || message || error?.message || "Something went wrong";
+      setFeedback({ type: "error", message: errorMsg });
     } finally {
       setLoading(false);
     }
@@ -429,6 +557,18 @@ const CreateListing = () => {
       {feedback.message ? (
         <div className={`sell-feedback ${feedback.type === "error" ? "error" : "success"}`} role="status" aria-live="polite">
           {feedback.message}
+        </div>
+      ) : null}
+
+      {isOffline ? (
+        <div className="sell-feedback info" role="status" aria-live="polite">
+          You are offline. Your draft is being saved locally so you can continue later.
+        </div>
+      ) : null}
+
+      {draftImageName ? (
+        <div className="sell-feedback info" role="status" aria-live="polite">
+          Saved image: {draftImageName}. Please re-select it if needed before submitting.
         </div>
       ) : null}
 
@@ -580,15 +720,22 @@ const CreateListing = () => {
         <label className="field-label" htmlFor="listingImage">
           Product image
         </label>
-        <p className="field-help">Use a clear photo of the actual item for faster responses.</p>
+        <p className="field-help">Upload a clear JPG, PNG, or WEBP image under 5MB for faster responses.</p>
         <input
           id="listingImage"
           className="sell-file-input"
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           onChange={handleImageChange}
           required
         />
+
+        {imagePreviewUrl ? (
+          <div className="image-preview-wrap">
+            <img src={imagePreviewUrl} alt="Selected product preview" className="image-preview" />
+            <span className="image-preview-name">{draftImageName}</span>
+          </div>
+        ) : null}
 
         <button className="btn btn-primary sell-submit-btn" disabled={loading}>
           {loading ? "Listing..." : "Create Listing"}
