@@ -54,6 +54,7 @@ test.describe('Auth flow shells', () => {
     await page.getByRole('button', { name: 'Login' }).click();
 
     await expect(page).toHaveURL(/\/marketplace$/);
-    await expect(page.getByText('No listings match your search')).toBeVisible();
+    await expect.poll(async () => await page.evaluate(() => localStorage.getItem('token'))).toBe('mock-jwt-token');
+    await expect.poll(async () => await page.evaluate(() => localStorage.getItem('user'))).toContain('Test Student');
   });
 });

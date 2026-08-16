@@ -75,16 +75,30 @@
 // };
 
 // export default ChatWindow;
-import React, { useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { getMessages, sendMessage, markAsRead } from "../../api/chat.api";
-import { SOCKET_URL } from "../../utils/runtimeConfig";
+import chatSocket, {
+  registerSocketListener,
+  unregisterSocketListener,
+  joinConversationRoom,
+  leaveConversationRoom,
+} from "./socket";
+import { ChatContext } from "./ChatContext";
+import {
+  applyDeliveredReceiptToMessages,
+  applyReadReceiptToMessages,
+  buildConversationKey,
+  getLastSeen,
+  getLatestMessageTimestamp,
+  mergeMessagesById,
+  setLastSeen,
+} from "./chatSync";
 
-const CHAT_UNREAD_UPDATED_EVENT = "chat-unread-updated";
-
-const socket = io(SOCKET_URL, {
-  autoConnect: false
-});
+const createClientMessageId = () => {
+  const cryptoApi = typeof window !== "undefined" ? window.crypto : null;
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
 
 // Tick mark component
 const MessageStatus = ({ status, isMyMessage }) => {
@@ -93,11 +107,11 @@ const MessageStatus = ({ status, isMyMessage }) => {
   const getTickMark = () => {
     switch (status) {
       case 'read':
-        return <span className="chat-status chat-status-read">✓✓</span>; // Blue double tick
+        return <span className="chat-status chat-status-read">✓✓</span>;
       case 'delivered':
-        return <span className="chat-status chat-status-delivered">✓✓</span>; // Gray double tick
+        return <span className="chat-status chat-status-delivered">✓✓</span>;
       default:
-        return <span className="chat-status chat-status-sent">✓</span>; // Gray single tick
+        return <span className="chat-status chat-status-sent">✓</span>;
     }
   };
 
@@ -105,75 +119,131 @@ const MessageStatus = ({ status, isMyMessage }) => {
 };
 
 const ChatWindow = ({ userId, otherUserId, name }) => {
+  const chatContext = useContext(ChatContext);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const ready = useMemo(() => userId && otherUserId, [userId, otherUserId]);
 
   useEffect(() => {
     if (!ready) return;
+    chatContext?.setActiveConversationId(otherUserId);
+    return () => chatContext?.setActiveConversationId(null);
+  }, [ready, otherUserId, chatContext]);
 
-    getMessages(userId, otherUserId).then((msgs) => {
-      setMessages(msgs);
-      // Mark messages as read when opening chat
-      markAsRead({ userId, otherUserId })
-        .then(() => window.dispatchEvent(new Event(CHAT_UNREAD_UPDATED_EVENT)))
-        .catch(console.error);
-      // Emit read receipt via socket
-      socket.emit("messagesRead", { userId, otherUserId });
-    });
+  useEffect(() => {
+    if (!ready || !chatSocket.connected) return;
 
-    if (!socket.connected) socket.connect();
-    socket.emit("join", { userId, otherUserId });
+    const conversationKey = buildConversationKey(userId, otherUserId);
+
+    const persistLastSeen = (items) => {
+      const latest = getLatestMessageTimestamp(items);
+      if (!latest) return;
+      setLastSeen(window.localStorage, conversationKey, latest);
+    };
+
+    const mergeAndPersist = (incoming) => {
+      setMessages((prev) => {
+        const next = mergeMessagesById(prev, incoming);
+        persistLastSeen(next);
+        return next;
+      });
+    };
+
+    const syncMissedMessages = async () => {
+      const since = getLastSeen(window.localStorage, conversationKey);
+      const newer = await getMessages(userId, otherUserId, since ? { since } : {});
+      if (newer.length > 0) {
+        mergeAndPersist(newer);
+      }
+    };
+
+    // Join room and load messages
+    joinConversationRoom(otherUserId);
+
+    getMessages(userId, otherUserId)
+      .then((msgs) => {
+        setMessages(msgs);
+        persistLastSeen(msgs);
+        setErrorMessage("");
+      })
+      .catch(() => {
+        setErrorMessage("Unable to connect to the CampusTrade network right now. Please check your connection and try again.");
+      });
+
+    // Define event handlers
+    const onConnect = () => {
+      joinConversationRoom(otherUserId);
+      syncMissedMessages().catch(() => {
+        setErrorMessage("Unable to sync recent messages. Please try again.");
+      });
+    };
 
     const onNewMessage = (msg) => {
-      setMessages((prev) => {
-        if (prev.some((m) => m._id === msg._id)) return prev;
-        return [...prev, msg];
-      });
-      
-      // If it's a message for me, mark it as read immediately
-      if (msg.receiver === userId) {
+      const receiverId = msg?.receiver?._id || msg?.receiver;
+      const senderId = msg?.sender?._id || msg?.sender;
+      const matchesActiveThread = String(senderId || "") === String(otherUserId || "");
+
+      if (matchesActiveThread) {
+        mergeAndPersist([msg]);
+      }
+
+      if (String(receiverId || "") === String(userId || "") && matchesActiveThread) {
+        chatSocket.emit("messageDelivered", { messageId: msg._id });
         markAsRead({ userId, otherUserId })
-          .then(() => window.dispatchEvent(new Event(CHAT_UNREAD_UPDATED_EVENT)))
-          .catch(console.error);
-        socket.emit("messagesRead", { userId, otherUserId });
+          .then(() => {
+            if (chatContext) {
+              chatContext.markConversationAsRead(otherUserId);
+            }
+            chatSocket.emit("messagesRead", { otherUserId });
+          })
+          .catch(() => {
+            setErrorMessage("Unable to connect to the CampusTrade network right now. Please check your connection and try again.");
+          });
       }
     };
 
     const onMessageStatusUpdate = ({ messageId, status }) => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m._id === messageId
-            ? { ...m, status, ...(status === 'delivered' ? { deliveredAt: new Date() } : {}), ...(status === 'read' ? { readAt: new Date() } : {}) }
-            : m
-        )
-      );
-    };
-
-    const onMessagesReadUpdate = ({ userId: readByUserId }) => {
-      // If the other user read my messages, update all my sent messages to read
-      if (readByUserId === otherUserId) {
+      if (status === "delivered") {
+        setMessages((prev) => applyDeliveredReceiptToMessages(prev, messageId));
+      }
+      if (status === "read") {
         setMessages((prev) =>
           prev.map((m) =>
-            m.sender?._id === userId && m.receiver === otherUserId
-              ? { ...m, status: 'read', readAt: new Date() }
+            m._id === messageId
+              ? { ...m, deliveredAt: m.deliveredAt || new Date().toISOString(), readAt: m.readAt || new Date().toISOString() }
               : m
           )
         );
       }
     };
 
-    socket.on("newMessage", onNewMessage);
-    socket.on("messageStatusUpdate", onMessageStatusUpdate);
-    socket.on("messagesReadUpdate", onMessagesReadUpdate);
-
-    return () => {
-      socket.off("newMessage", onNewMessage);
-      socket.off("messageStatusUpdate", onMessageStatusUpdate);
-      socket.off("messagesReadUpdate", onMessagesReadUpdate);
+    const onMessagesReadUpdate = ({ userId: readByUserId }) => {
+      setMessages((prev) => applyReadReceiptToMessages(prev, readByUserId, userId, otherUserId));
     };
-  }, [ready, userId, otherUserId]);
+
+    const onChatError = () => {
+      setErrorMessage("Unable to connect to the CampusTrade network right now. Please check your connection and try again.");
+    };
+
+    // Register socket listeners
+    registerSocketListener("connect", onConnect);
+    registerSocketListener("newMessage", onNewMessage);
+    registerSocketListener("messageStatusUpdate", onMessageStatusUpdate);
+    registerSocketListener("messagesReadUpdate", onMessagesReadUpdate);
+    registerSocketListener("chatError", onChatError);
+
+    // Cleanup
+    return () => {
+      leaveConversationRoom(otherUserId);
+      unregisterSocketListener("connect", onConnect);
+      unregisterSocketListener("newMessage", onNewMessage);
+      unregisterSocketListener("messageStatusUpdate", onMessageStatusUpdate);
+      unregisterSocketListener("messagesReadUpdate", onMessagesReadUpdate);
+      unregisterSocketListener("chatError", onChatError);
+    };
+  }, [ready, userId, otherUserId, chatContext]);
 
   const handleSend = async () => {
     if (!text.trim() || !ready) return;
@@ -181,10 +251,11 @@ const ChatWindow = ({ userId, otherUserId, name }) => {
     const saved = await sendMessage({
       senderId: userId,
       receiverId: otherUserId,
-      message: text.trim()
+      message: text.trim(),
+      clientMessageId: createClientMessageId(),
     });
 
-    setMessages((prev) => [...prev, saved]);
+    setMessages((prev) => mergeMessagesById(prev, [saved]));
     setText("");
   };
 
@@ -195,6 +266,8 @@ const ChatWindow = ({ userId, otherUserId, name }) => {
       <div className="chat-header">
         {name || "User"}
       </div>
+
+      {errorMessage ? <div className="chat-error-banner">{errorMessage}</div> : null}
 
       <div className="chat-messages">
         {messages.map((m) => {

@@ -256,7 +256,7 @@ const Register = () => {
               setErrorList(normalized);
               setErrorMessage("Please correct the highlighted details and try again.");
             } else {
-              const rawMessage = data?.details || data?.message || "Registration failed";
+              const rawMessage = error?.friendlyMessage || data?.details || data?.message || "Unable to connect to the CampusTrade network right now. Please check your connection and try again.";
               const message = String(rawMessage).replace(/https?:\/\/localhost:\d+/gi, "this app");
               setErrorMessage(message);
             }

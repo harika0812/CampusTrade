@@ -103,6 +103,17 @@ import { initChatSocket } from "./sockets/chat.socket.js";
 dotenv.config();
 
 const PORT = process.env.PORT || 5000;
+const allowedSocketOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
+  "http://localhost:5000",
+  "https://campus-trade-mu.vercel.app",
+  process.env.CLIENT_URL,
+  process.env.REACT_APP_CLIENT_URL,
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 mongoose
   .connect(process.env.MONGO_URI)
@@ -110,8 +121,15 @@ mongoose
   .catch((err) => console.log(err));
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, {
+  cors: {
+    origin: allowedSocketOrigins,
+    credentials: true,
+    methods: ["GET", "POST"],
+  },
+});
 
+app.set("io", io);
 initChatSocket(io);
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

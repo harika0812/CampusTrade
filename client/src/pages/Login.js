@@ -238,18 +238,25 @@ const Login = () => {
 
     try {
       const res = await API.post("/auth/login", formData);
+      const token = res.data?.accessToken || res.data?.token;
+      const user = res.data?.user;
 
-      login(res.data.user, res.data.token);
+      if (!token) {
+        throw new Error("Authentication response did not include a token.");
+      }
 
+      login(user, token);
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      const apiMessage =
+      const friendlyMessage =
+        error?.friendlyMessage ||
         error?.response?.data?.details ||
         error?.response?.data?.message ||
-        (error?.response
-          ? "Login failed"
-          : "Unable to reach the server. Make sure the backend is running and the API URL is correct.");
-      setErrorMessage(apiMessage.replace(/https?:\/\/localhost:\d+/gi, "this app"));
+        "Unable to connect to the CampusTrade network right now. Please check your connection and try again.";
+
+      setErrorMessage(
+        String(friendlyMessage).replace(/https?:\/\/localhost:\d+/gi, "this app")
+      );
     } finally {
       setIsSubmitting(false);
     }

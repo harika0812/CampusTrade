@@ -5,18 +5,25 @@ export const getConversations = async (userId) => {
   return data.data || [];
 };
 
-export const getMessages = async (userId, otherUserId) => {
+export const getMessages = async (userId, otherUserId, options = {}) => {
   const params = new URLSearchParams({ userId, otherUserId });
+  if (options.since) {
+    params.set("since", options.since);
+  }
+  if (options.sinceMessageId) {
+    params.set("sinceMessageId", options.sinceMessageId);
+  }
   const { data } = await api.get(`/chat/messages?${params.toString()}`);
   return data.data || [];
 };
 
-export const sendMessage = async ({ senderId, receiverId, productId, message }) => {
+export const sendMessage = async ({ senderId, receiverId, productId, message, clientMessageId }) => {
   const { data } = await api.post("/chat/messages", {
     senderId,
     receiverId,
     productId, // Optional - kept for context in messages
-    message
+    message,
+    clientMessageId,
   });
   return data.data;
 };

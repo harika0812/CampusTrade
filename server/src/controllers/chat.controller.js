@@ -1,45 +1,136 @@
 import mongoose from "mongoose";
 import Message from "../models/Message.js";
+import { buildRoomId } from "../sockets/chat.helpers.js";
+import { emitNewMessageEvent } from "../sockets/chat.socket.js";
 
-const buildRoomId = (userA, userB) => {
-  const [u1, u2] = [userA, userB].sort();
-  return `${u1}_${u2}`;
+const ensureAuthenticatedUserClaim = (authUserId, claimedUserId) => {
+  if (!authUserId) {
+    throw Object.assign(new Error("Unauthorized"), { statusCode: 401 });
+  }
+
+  if (claimedUserId && String(claimedUserId) !== String(authUserId)) {
+    throw Object.assign(new Error("Sender identity mismatch"), { statusCode: 403 });
+  }
+
+  return String(authUserId);
 };
+
+const populateMessage = (query) =>
+  query
+    .populate("sender", "name email rollNo")
+    .populate("receiver", "name email rollNo")
+    .populate("product", "title price");
+
+export const persistMessageIdempotent = async ({
+  MessageModel = Message,
+  senderId,
+  receiverId,
+  productId,
+  message,
+  clientMessageId,
+}) => {
+  const existing = await MessageModel.findOne({ sender: senderId, clientMessageId });
+  if (existing) {
+    return { duplicate: true, document: existing };
+  }
+
+  const created = await MessageModel.create({
+    sender: senderId,
+    receiver: receiverId,
+    product: productId,
+    message,
+    clientMessageId,
+  });
+
+  return { duplicate: false, document: created };
+};
+
+const parseSinceFilter = (query) => {
+  const { since, sinceMessageId } = query || {};
+
+  if (sinceMessageId && mongoose.Types.ObjectId.isValid(sinceMessageId)) {
+    return { _id: { $gt: new mongoose.Types.ObjectId(sinceMessageId) } };
+  }
+
+  if (since) {
+    const parsed = new Date(since);
+    if (!Number.isNaN(parsed.getTime())) {
+      return { createdAt: { $gt: parsed } };
+    }
+  }
+
+  return {};
+};
+
 export const sendMessage = async (req, res) => {
   try {
-    const { senderId, receiverId, productId, message } = req.body;
+    const authUserId = String(req.user?.userId || "");
+    const { senderId, receiverId, productId, message, clientMessageId } = req.body;
 
-    if (!senderId || !receiverId || !message) {
-      return res.status(400).json({ message: "senderId, receiverId, message required" });
+    const safeSenderId = ensureAuthenticatedUserClaim(authUserId, senderId);
+
+    if (!receiverId || !message || !clientMessageId) {
+      return res.status(400).json({ message: "receiverId, message, and clientMessageId are required" });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(receiverId)) {
+    if (!mongoose.Types.ObjectId.isValid(safeSenderId) || !mongoose.Types.ObjectId.isValid(receiverId)) {
       return res.status(400).json({ message: "Invalid senderId or receiverId" });
     }
     const safeProductId =
       productId && mongoose.Types.ObjectId.isValid(productId) ? productId : undefined;
 
-    const doc = await Message.create({
-      sender: senderId,
-      receiver: receiverId,
-      product: safeProductId,
-      message
+    const normalizedClientMessageId = String(clientMessageId || "").trim();
+    const persisted = await persistMessageIdempotent({
+      MessageModel: Message,
+      senderId: safeSenderId,
+      receiverId,
+      productId: safeProductId,
+      message,
+      clientMessageId: normalizedClientMessageId,
     });
-   const populated = await doc.populate([
-  { path: "sender", select: "name email rollNo" },
-  { path: "receiver", select: "name email rollNo" },
-  { path: "product", select: "title price" }
-]);
+
+    const populated = await populateMessage(Message.findById(persisted.document._id));
+
+    if (persisted.duplicate) {
+      return res.status(200).json({
+        message: "Message already processed",
+        data: populated,
+        duplicate: true,
+      });
+    }
+
+    const io = req.app.get("io");
+    if (io && populated) {
+      emitNewMessageEvent(io, populated);
+    }
+
     return res.status(201).json({ message: "Message sent", data: populated });
   } catch (err) {
+    if (err?.code === 11000) {
+      const authUserId = String(req.user?.userId || "");
+      const normalizedClientMessageId = String(req.body?.clientMessageId || "").trim();
+      const existing = await populateMessage(
+        Message.findOne({ sender: authUserId, clientMessageId: normalizedClientMessageId })
+      );
+      if (existing) {
+        return res.status(200).json({
+          message: "Message already processed",
+          data: existing,
+          duplicate: true,
+        });
+      }
+    }
     console.error("CHAT SEND ERROR:", err);
-    return res.status(500).json({ message: err.message || "Failed to send message" });
+    const statusCode = err?.statusCode || 500;
+    return res.status(statusCode).json({ message: err.message || "Failed to send message" });
   }
 };
 
 export const getMessages = async (req, res, next) => {
   try {
-    const { userId, otherUserId, productId } = req.query;
+    const { userId, otherUserId } = req.query;
+    const authUserId = ensureAuthenticatedUserClaim(req.user?.userId, userId);
+
     if (!userId || !otherUserId) {
       return res.status(400).json({ message: "userId and otherUserId required" });
     }
@@ -51,13 +142,12 @@ export const getMessages = async (req, res, next) => {
 
     const query = {
       $or: [
-        { sender: userId, receiver: otherUserId },
-        { sender: otherUserId, receiver: userId }
+        { sender: authUserId, receiver: otherUserId },
+        { sender: otherUserId, receiver: authUserId }
       ],
-      deletedFor: { $ne: userObjectId }
+      deletedFor: { $ne: userObjectId },
+      ...parseSinceFilter(req.query),
     };
-
-    // Product is kept in messages for context, but not used for filtering
 
     const msgs = await Message.find(query)
       .sort({ createdAt: 1 })
@@ -67,6 +157,9 @@ export const getMessages = async (req, res, next) => {
 
     return res.json({ data: msgs });
   } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     next(err);
   }
 };
@@ -74,12 +167,13 @@ export const getMessages = async (req, res, next) => {
 export const getConversations = async (req, res, next) => {
   try {
     const { userId } = req.query;
+    const authUserId = ensureAuthenticatedUserClaim(req.user?.userId, userId);
     if (!userId) return res.status(400).json({ message: "userId required" });
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Invalid userId" });
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userObjectId = new mongoose.Types.ObjectId(authUserId);
 
     const convos = await Message.aggregate([
       {
@@ -147,27 +241,37 @@ export const getConversations = async (req, res, next) => {
 
     return res.json({ data: convos });
   } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     next(err);
   }
 };
 
 export const getRoomId = (req, res) => {
-  const { userId, otherUserId } = req.query;
-  if (!userId || !otherUserId) {
-    return res.status(400).json({ message: "userId and otherUserId required" });
+  try {
+    const { userId, otherUserId } = req.query;
+    ensureAuthenticatedUserClaim(req.user?.userId, userId);
+    if (!userId || !otherUserId) {
+      return res.status(400).json({ message: "userId and otherUserId required" });
+    }
+    return res.json({ roomId: buildRoomId(userId, otherUserId) });
+  } catch (err) {
+    const statusCode = err?.statusCode || 500;
+    return res.status(statusCode).json({ message: err.message || "Failed to build room" });
   }
-  return res.json({ roomId: buildRoomId(userId, otherUserId) });
 };
 
 export const markAsDelivered = async (req, res) => {
   try {
+    const authUserId = String(req.user?.userId || "");
     const { messageIds } = req.body;
     if (!Array.isArray(messageIds) || messageIds.length === 0) {
       return res.status(400).json({ message: "messageIds array required" });
     }
 
     await Message.updateMany(
-      { _id: { $in: messageIds }, deliveredAt: null },
+      { _id: { $in: messageIds }, receiver: authUserId, deliveredAt: null },
       { deliveredAt: new Date() }
     );
 
@@ -180,15 +284,16 @@ export const markAsDelivered = async (req, res) => {
 export const markAsRead = async (req, res) => {
   try {
     const { userId, otherUserId } = req.body;
+    const authUserId = ensureAuthenticatedUserClaim(req.user?.userId, userId);
     if (!userId || !otherUserId) {
       return res.status(400).json({ message: "userId and otherUserId required" });
     }
 
     const query = {
       sender: otherUserId,
-      receiver: userId,
+      receiver: authUserId,
       readAt: null,
-      deletedFor: { $ne: userId }
+      deletedFor: { $ne: authUserId }
     };
 
     const updated = await Message.updateMany(query, { 
@@ -208,14 +313,15 @@ export const markAsRead = async (req, res) => {
 export const getUnreadCount = async (req, res) => {
   try {
     const { userId } = req.query;
+    const authUserId = ensureAuthenticatedUserClaim(req.user?.userId, userId);
     if (!userId) {
       return res.status(400).json({ message: "userId required" });
     }
 
     const count = await Message.countDocuments({
-      receiver: userId,
+      receiver: authUserId,
       readAt: null,
-      deletedFor: { $ne: userId }
+      deletedFor: { $ne: authUserId }
     });
 
     return res.json({ count });
@@ -227,18 +333,19 @@ export const getUnreadCount = async (req, res) => {
 export const deleteConversation = async (req, res) => {
   try {
     const { userId, otherUserId } = req.body;
+    const authUserId = ensureAuthenticatedUserClaim(req.user?.userId, userId);
     if (!userId || !otherUserId) {
       return res.status(400).json({ message: "userId and otherUserId required" });
     }
 
     const result = await Message.updateMany({
       $or: [
-        { sender: userId, receiver: otherUserId },
-        { sender: otherUserId, receiver: userId }
+        { sender: authUserId, receiver: otherUserId },
+        { sender: otherUserId, receiver: authUserId }
       ],
-      deletedFor: { $ne: userId }
+      deletedFor: { $ne: authUserId }
     }, {
-      $addToSet: { deletedFor: userId }
+      $addToSet: { deletedFor: authUserId }
     });
 
     return res.json({

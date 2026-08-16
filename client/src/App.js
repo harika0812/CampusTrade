@@ -1,30 +1,39 @@
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
 import Navbar from "./components/Navbar";
-import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Marketplace from "./pages/Marketplace";
-import ProductDetails from "./pages/ProductDetails";
-import MyListings from "./pages/MyListings";
-import CreateListing from "./pages/CreateListing";
-import EditListing from "./pages/EditListing";
-import Chat from "./pages/Chat";
-import VerifyEmail from "./pages/VerifyEmail";
-import Cart from "./pages/Cart";
-import Profile from "./pages/Profile";
-import MyOrders from "./pages/MyOrders";
-import SellerOrders from "./pages/SellerOrders";
-import Notifications from "./pages/Notifications";
 import PrivateRoute from "./routes/PrivateRoute";
-import { useEffect, useState } from "react";
 import GlobalLoader from "./components/Loader/GlobalLoader";
 import GlobalToast from "./components/Modal/GlobalToast";
 import { setSessionExpiredHandler } from "./api/axios";
 import SessionExpiredModal from "./components/Modal/SessionExpiredModal";
 import { useAuth } from "./app/authContext";
 import { refreshToken as refreshTokenApi } from "./api/auth.api";
+import { ChatProvider } from "./features/chat/ChatContext";
+import { initChatSocket, disconnectChatSocket } from "./features/chat/socket";
+
+const Landing = lazy(() => import("./pages/Landing"));
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Marketplace = lazy(() => import("./pages/Marketplace"));
+const ProductDetails = lazy(() => import("./pages/ProductDetails"));
+const MyListings = lazy(() => import("./pages/MyListings"));
+const CreateListing = lazy(() => import("./pages/CreateListing"));
+const EditListing = lazy(() => import("./pages/EditListing"));
+const Chat = lazy(() => import("./pages/Chat"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const Cart = lazy(() => import("./pages/Cart"));
+const Profile = lazy(() => import("./pages/Profile"));
+const MyOrders = lazy(() => import("./pages/MyOrders"));
+const SellerOrders = lazy(() => import("./pages/SellerOrders"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+
+const RouteFallback = () => (
+  <div className="route-fallback" aria-live="polite" aria-busy="true">
+    <div className="route-fallback-spinner" />
+  </div>
+);
 
 function useScrollAndTitle() {
   const location = useLocation();
@@ -61,7 +70,19 @@ function App() {
   const [globalLoading, setGlobalLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", type: "info" });
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const location = useLocation();
+  const { logout, isAuthenticated, user } = useAuth();
+
+  // Initialize/cleanup chat socket on auth state change
+  useEffect(() => {
+    if (isAuthenticated) {
+      initChatSocket();
+      console.log("🔌 Chat socket initialized");
+    } else {
+      disconnectChatSocket();
+      console.log("🔌 Chat socket disconnected");
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
@@ -125,28 +146,33 @@ function App() {
         onClose={() => setToast({ ...toast, open: false })}
       />
       <SessionExpiredModal open={sessionExpired} onLogin={handleLogin} />
-      <Navbar />
-      <main className="app-main">
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/marketplace" element={<PrivateRoute><Marketplace /></PrivateRoute>} />
-          <Route path="/products/:id" element={<PrivateRoute><ProductDetails /></PrivateRoute>} />
-          <Route path="/my-listings" element={<PrivateRoute><MyListings /></PrivateRoute>} />
-          <Route path="/create-listing" element={<PrivateRoute><CreateListing /></PrivateRoute>} />
-          <Route path="/edit-listing/:id" element={<PrivateRoute><EditListing /></PrivateRoute>} />
-          <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />
-          <Route path="/cart" element={<PrivateRoute><Cart /></PrivateRoute>} />
-          <Route path="/orders" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
-          <Route path="/seller-orders" element={<PrivateRoute><SellerOrders /></PrivateRoute>} />
-          <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-          <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-          <Route path="/verify" element={<VerifyEmail />} />
-        </Routes>
-      </main>
+      <ChatProvider userId={user?.id}>
+        <Navbar />
+        <main className="app-main">
+          <Suspense fallback={<RouteFallback />}>
+            <Routes location={location}>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/marketplace" element={<PrivateRoute><Marketplace /></PrivateRoute>} />
+              <Route path="/products/:id" element={<PrivateRoute><ProductDetails /></PrivateRoute>} />
+              <Route path="/my-listings" element={<PrivateRoute><MyListings /></PrivateRoute>} />
+              <Route path="/create-listing" element={<PrivateRoute><CreateListing /></PrivateRoute>} />
+              <Route path="/edit-listing/:id" element={<PrivateRoute><EditListing /></PrivateRoute>} />
+              <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />
+              <Route path="/cart" element={<PrivateRoute><Cart /></PrivateRoute>} />
+              <Route path="/orders" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
+              <Route path="/seller-orders" element={<PrivateRoute><SellerOrders /></PrivateRoute>} />
+              <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+              <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+              <Route path="/verify" element={<VerifyEmail />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </ChatProvider>
     </>
   );
 }

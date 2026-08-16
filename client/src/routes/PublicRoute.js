@@ -1,10 +1,10 @@
 import { Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "../app/authContext";
 
 const PublicRoute = () => {
-  const token = localStorage.getItem("token");
+  const { isAuthenticated } = useAuth();
 
-  // If logged in, redirect to marketplace
-  return token ? <Navigate to="/marketplace" /> : <Outlet />;
+  return isAuthenticated ? <Navigate to="/marketplace" replace /> : <Outlet />;
 };
 
 export default PublicRoute;

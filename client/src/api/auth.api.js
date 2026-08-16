@@ -1,4 +1,4 @@
-import API from "./axios";
+import API from "./axios.js";
 
 export const loginUser = async (data) => {
   const response = await API.post("/auth/login", data, { withCredentials: true });

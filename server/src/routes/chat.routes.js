@@ -2,8 +2,11 @@ import express from "express";
 import { sendMessage, getMessages, getConversations, getRoomId, markAsDelivered, markAsRead, getUnreadCount, deleteConversation } from "../controllers/chat.controller.js";
 import { validateMessage, validateUserIdsQuery, validateUserIdQuery, validateUserIdsBody } from "../middlewares/validate.js";
 import { chatLimiter, chatReadLimiter } from "../middlewares/rateLimit.middleware.js";
+import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
+
+router.use(protect);
 
 router.get("/conversations", chatReadLimiter, validateUserIdQuery, getConversations);
 router.get("/messages", chatReadLimiter, validateUserIdsQuery, getMessages);

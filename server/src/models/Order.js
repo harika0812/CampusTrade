@@ -37,6 +37,22 @@ const orderSchema = new mongoose.Schema(
       default: "pending"
     },
 
+    checkoutKey: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    inventoryReservedAtCheckout: {
+      type: Boolean,
+      default: false,
+    },
+
+    inventoryRestored: {
+      type: Boolean,
+      default: false,
+    },
+
     paymentMode: {
       type: String,
       enum: ["online", "offline"],

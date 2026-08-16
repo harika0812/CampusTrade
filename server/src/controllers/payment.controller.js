@@ -1,8 +1,151 @@
+import mongoose from "mongoose";
 import razorpay from "../config/razorpay.js";
 import Order from "../models/Order.js";
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import crypto from "crypto";
+
+export const normalizeCheckoutItems = (items = []) => {
+  const qtyByProductId = {};
+
+  for (const item of Array.isArray(items) ? items : []) {
+    const productId = String(item?.productId || "").trim();
+    if (!productId) continue;
+
+    const quantity = Number(item?.quantity || 1);
+    if (!Number.isFinite(quantity) || quantity < 1) continue;
+
+    qtyByProductId[productId] = (qtyByProductId[productId] || 0) + quantity;
+  }
+
+  return Object.entries(qtyByProductId).map(([productId, quantity]) => ({
+    productId,
+    quantity,
+  }));
+};
+
+export const buildCheckoutKey = (buyerId, items = [], meetupPlace = "") => {
+  const normalizedItems = normalizeCheckoutItems(items)
+    .map(({ productId, quantity }) => [String(productId), Number(quantity)])
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return crypto
+    .createHash("sha256")
+    .update(
+      JSON.stringify({
+        buyerId: String(buyerId || ""),
+        meetupPlace: String(meetupPlace || "").trim().toLowerCase(),
+        items: normalizedItems,
+      })
+    )
+    .digest("hex");
+};
+
+export const reserveProductCopies = async ({
+  ProductModel = Product,
+  productId,
+  quantity,
+  session = null,
+}) => {
+  const normalizedProductId = String(productId || "").trim();
+  const normalizedQuantity = Number(quantity || 1);
+
+  if (!normalizedProductId) {
+    throw Object.assign(new Error("Missing product id"), { statusCode: 400, code: "INVALID_PRODUCT" });
+  }
+
+  if (!Number.isFinite(normalizedQuantity) || normalizedQuantity < 1) {
+    throw Object.assign(new Error("Quantity must be at least 1"), {
+      statusCode: 400,
+      code: "INVALID_QUANTITY",
+    });
+  }
+
+  const reservedProduct = await ProductModel.findOneAndUpdate(
+    {
+      _id: normalizedProductId,
+      isSold: false,
+      availableCopies: { $gte: normalizedQuantity },
+    },
+    {
+      $inc: { availableCopies: -normalizedQuantity },
+      $set: { isSold: false },
+    },
+    {
+      new: true,
+      session,
+    }
+  );
+
+  if (!reservedProduct) {
+    const current = await ProductModel.findById(normalizedProductId, null, { session });
+    const currentCopies = current ? Math.max(0, Number(current.availableCopies || 0)) : 0;
+
+    throw Object.assign(new Error("Insufficient inventory"), {
+      statusCode: 400,
+      code: "INSUFFICIENT_INVENTORY",
+      availableCopies: currentCopies,
+      requestedQuantity: normalizedQuantity,
+    });
+  }
+
+  if (Number(reservedProduct.availableCopies || 0) === 0) {
+    await ProductModel.findByIdAndUpdate(
+      normalizedProductId,
+      { $set: { isSold: true } },
+      { session, new: true }
+    );
+
+    reservedProduct.isSold = true;
+  }
+
+  return {
+    ok: true,
+    product: reservedProduct,
+  };
+};
+
+export const restoreProductCopies = async ({
+  ProductModel = Product,
+  items = [],
+  session = null,
+}) => {
+  const normalizedItems = normalizeCheckoutItems(items);
+  const restored = [];
+
+  for (const item of normalizedItems) {
+    const productId = String(item.productId || "").trim();
+    if (!productId) continue;
+
+    const updated = await ProductModel.findOneAndUpdate(
+      { _id: productId },
+      {
+        $inc: { availableCopies: item.quantity },
+        $set: { isSold: false },
+      },
+      {
+        new: true,
+        session,
+      }
+    );
+
+    if (!updated) {
+      continue;
+    }
+
+    restored.push({
+      productId,
+      quantity: item.quantity,
+      availableCopies: updated.availableCopies,
+    });
+  }
+
+  return {
+    ok: true,
+    restored,
+  };
+};
+
 const getReservedCopiesByProductIds = async (productIds = []) => {
   if (!Array.isArray(productIds) || productIds.length === 0) {
     return {};
@@ -59,6 +202,46 @@ const decrementProductCopies = async (items = []) => {
 
     await product.save();
   }
+};
+
+const getProductReservationSummary = async (productIds = []) => {
+  if (!Array.isArray(productIds) || productIds.length === 0) {
+    return {};
+  }
+
+  const orders = await Order.find({
+    status: "pending",
+    $or: [
+      { paymentMode: "online" },
+      {
+        paymentMode: "offline",
+        offlineStatus: { $in: ["placed", "accepted", "scheduled"] },
+      },
+    ],
+    "items.productId": { $in: productIds },
+  }).select("items");
+
+  const reservedByProductId = {};
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      const productId = item?.productId?.toString?.();
+      if (!productId) continue;
+
+      const quantity = Number(item?.quantity || 1);
+      reservedByProductId[productId] =
+        (reservedByProductId[productId] || 0) + (Number.isFinite(quantity) && quantity > 0 ? quantity : 1);
+    }
+  }
+
+  return reservedByProductId;
+};
+
+const getDuplicateCheckoutOrder = async ({ userId, checkoutKey, session = null }) => {
+  return Order.findOne({
+    buyer: userId,
+    checkoutKey,
+    status: { $ne: "cancelled" },
+  }, null, { session });
 };
 
 const ensureRazorpayConfigured = (res) => {
@@ -156,103 +339,155 @@ export const createOfflineOrders = async (req, res) => {
       return res.status(400).json({ message: "Only COD is supported on this platform." });
     }
 
-    const groupedBySeller = {};
+    const normalizedCartItems = normalizeCheckoutItems(cartItems);
+    if (!normalizedCartItems.length) {
+      return res.status(400).json({ message: "No offline items provided" });
+    }
 
-    for (const item of cartItems) {
-      const quantity = Number(item.quantity || 1);
-      if (!Number.isFinite(quantity) || quantity < 1) {
-        return res.status(400).json({ message: "Quantity must be at least 1" });
-      }
+    const checkoutKey = buildCheckoutKey(userId, normalizedCartItems, meetupPlace);
+    const session = await mongoose.startSession();
+    let createdOrders = [];
 
-      const product = await Product.findById(item.productId).populate("seller", "name razorpayAccountId");
+    try {
+      await session.withTransaction(async () => {
+        const duplicateOrder = await getDuplicateCheckoutOrder({ userId, checkoutKey, session });
+        if (duplicateOrder) {
+          throw Object.assign(new Error("This checkout request has already been processed."), {
+            statusCode: 409,
+            code: "DUPLICATE_CHECKOUT",
+            existingOrder: duplicateOrder._id,
+          });
+        }
 
-      if (!product) {
-        return res.status(404).json({ message: `Product ${item.productId} not found` });
-      }
+        const groupedBySeller = {};
 
-      const availableCopies = Math.max(0, Number(product.availableCopies ?? 1));
-      const reservedByProductId = await getReservedCopiesByProductIds([product._id]);
-      const reservedCopies = Number(reservedByProductId[product._id.toString()] || 0);
-      const purchasableCopies = Math.max(0, availableCopies - reservedCopies);
+        for (const item of normalizedCartItems) {
+          const product = await Product.findById(item.productId).populate("seller", "name razorpayAccountId").session(session);
 
-      if (product.isSold || availableCopies <= 0) {
-        return res.status(400).json({ message: `${product.title} is already sold` });
-      }
+          if (!product) {
+            throw Object.assign(new Error(`Product ${item.productId} not found`), {
+              statusCode: 404,
+              code: "PRODUCT_NOT_FOUND",
+            });
+          }
 
-      if (quantity > purchasableCopies) {
-        return res.status(400).json({
-          message: `${product.title} has only ${purchasableCopies} copy/copies available right now`,
+          const sellerId = product.seller?._id?.toString?.() || product.seller?.toString?.();
+          if (!sellerId) {
+            throw Object.assign(new Error(`${product.title} seller not available`), {
+              statusCode: 400,
+              code: "SELLER_NOT_FOUND",
+            });
+          }
+
+          const reservation = await reserveProductCopies({
+            ProductModel: Product,
+            productId: product._id,
+            quantity: item.quantity,
+            session,
+          });
+
+          if (!reservation?.ok) {
+            throw Object.assign(new Error(`${product.title} has only ${Number(product.availableCopies || 0)} copy/copies available right now`), {
+              statusCode: 400,
+              code: "INSUFFICIENT_INVENTORY",
+              availableCopies: Number(product.availableCopies || 0),
+              requestedQuantity: item.quantity,
+            });
+          }
+
+          if (!groupedBySeller[sellerId]) {
+            groupedBySeller[sellerId] = {
+              sellerId,
+              sellerName: product.seller?.name || "Seller",
+              items: [],
+              amount: 0,
+            };
+          }
+
+          const itemTotal = Number(product.price || 0) * item.quantity;
+
+          groupedBySeller[sellerId].items.push({
+            productId: product._id,
+            title: product.title,
+            price: product.price,
+            quantity: item.quantity,
+            imageUrl: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : "",
+            category: product.category,
+            description: product.description,
+          });
+          groupedBySeller[sellerId].amount += itemTotal;
+        }
+
+        const offlineOrders = [];
+
+        for (const group of Object.values(groupedBySeller)) {
+          const created = await Order.create(
+            [{
+              buyer: userId,
+              amount: group.amount,
+              meetupPlace: String(meetupPlace).trim(),
+              status: "pending",
+              checkoutKey,
+              inventoryReservedAtCheckout: true,
+              paymentMode: "offline",
+              offlinePaymentMethod: normalizedPaymentMethod,
+              offlineStatus: "placed",
+              items: group.items.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+              })),
+              sellerBreakdown: [
+                {
+                  seller: group.sellerId,
+                  items: group.items,
+                  amount: group.amount,
+                  transferStatus: "pending",
+                },
+              ],
+            }],
+            { session }
+          );
+
+          offlineOrders.push({
+            orderId: created[0]._id,
+            sellerId: group.sellerId,
+            sellerName: group.sellerName,
+            amount: group.amount,
+          });
+        }
+
+        createdOrders = offlineOrders;
+        return offlineOrders;
+      });
+
+      return res.status(201).json({
+        message: "Offline orders created successfully",
+        orders: createdOrders,
+      });
+    } catch (error) {
+      if (error?.statusCode === 409) {
+        return res.status(409).json({
+          message: error.message,
+          duplicateCheckout: true,
+          code: error.code,
         });
       }
 
-      // COD-only checkout: payment collection is coordinated directly between buyer and seller.
-
-      const sellerId = product.seller?._id?.toString();
-      if (!sellerId) {
-        return res.status(400).json({ message: `${product.title} seller not available` });
+      if (error?.statusCode === 400 || error?.code === "INSUFFICIENT_INVENTORY") {
+        return res.status(400).json({
+          message: error.message,
+          code: error.code,
+          availableCopies: error.availableCopies,
+          requestedQuantity: error.requestedQuantity,
+        });
       }
 
-      if (!groupedBySeller[sellerId]) {
-        groupedBySeller[sellerId] = {
-          sellerId,
-          sellerName: product.seller?.name || "Seller",
-          items: [],
-          amount: 0,
-        };
-      }
-
-      const itemTotal = Number(product.price || 0) * quantity;
-
-      groupedBySeller[sellerId].items.push({
-        productId: product._id,
-        title: product.title,
-        price: product.price,
-        quantity,
-        imageUrl: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : "",
-        category: product.category,
-        description: product.description,
-      });
-      groupedBySeller[sellerId].amount += itemTotal;
+      console.error("CREATE OFFLINE ORDERS ERROR:", error);
+      return res.status(500).json({ message: error.message || "Failed to create offline orders" });
+    } finally {
+      session.endSession();
     }
 
-    const offlineOrders = [];
-
-    for (const group of Object.values(groupedBySeller)) {
-      const created = await Order.create({
-        buyer: userId,
-        amount: group.amount,
-        meetupPlace: String(meetupPlace).trim(),
-        status: "pending",
-        paymentMode: "offline",
-        offlinePaymentMethod: normalizedPaymentMethod,
-        offlineStatus: "placed",
-        items: group.items.map((item) => ({
-
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
-        sellerBreakdown: [
-          {
-            seller: group.sellerId,
-            items: group.items,
-            amount: group.amount,
-            transferStatus: "pending",
-          },
-        ],
-      });
-
-      offlineOrders.push({
-        orderId: created._id,
-        sellerId: group.sellerId,
-        sellerName: group.sellerName,
-        amount: group.amount,
-      });
-    }
-
-    return res.status(201).json({
-      message: "Offline orders created successfully",
-      orders: offlineOrders,
-    });
   } catch (error) {
     console.error("CREATE OFFLINE ORDERS ERROR:", error);
     return res.status(500).json({ message: error.message || "Failed to create offline orders" });
@@ -612,7 +847,10 @@ export const updateOfflineOrderStatus = async (req, res) => {
     }
 
     if (offlineStatus === "completed") {
-      await decrementProductCopies(order.items || []);
+      if (!order.inventoryReservedAtCheckout) {
+        await decrementProductCopies(order.items || []);
+        order.inventoryReservedAtCheckout = true;
+      }
       order.status = "paid";
       order.paidAt = new Date();
       order.offlinePaymentConfirmation = {
@@ -623,6 +861,24 @@ export const updateOfflineOrderStatus = async (req, res) => {
     }
 
     if (offlineStatus === "cancelled") {
+      if (order.inventoryRestored) {
+        return res.status(200).json({
+          message: "Offline order already cancelled",
+          order: {
+            _id: order._id,
+            offlineStatus: order.offlineStatus,
+            meetupPlace: order.meetupPlace,
+          },
+        });
+      }
+
+      if (order.inventoryReservedAtCheckout) {
+        await restoreProductCopies({
+          items: order.items || [],
+          session: null,
+        });
+      }
+      order.inventoryRestored = true;
       order.status = "cancelled";
     }
 
